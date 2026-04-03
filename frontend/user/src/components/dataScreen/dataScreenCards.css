@@ -1,0 +1,206 @@
+/* 数据看板卡片 - 与 dashboard 卡片样式一致（底色、边框、圆角） */
+/* 使用 grid 确保 header 与 body 严格同宽，避免缩放时亚像素差异 */
+.screen-card {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  background: transparent;
+  overflow: visible;
+}
+
+.screen-card-header {
+  grid-column: 1;
+  grid-row: 1;
+  height: 56px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  background-image: url('/dataScreen/images/title.png');
+  background-repeat: no-repeat;
+  background-position: left top;
+  background-size: 100% 100%;
+}
+
+.screen-card-header-title {
+  margin-left: 48px;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: #0f7f62;
+  font-weight: bold;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+}
+
+.screen-card-body {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #f0fbef 36.54%, #e0e9da 100%);
+  box-shadow: 0 2px 4px rgba(85, 160, 92, 0.6)/*, 4px 0 8px rgba(85, 160, 92, 0.35), -4px 0 8px rgba(85, 160, 92, 0.35)*/; 
+  border-radius: 0 0 15px 15px;
+}
+
+/* 隧道能耗排行、月度节能统计：内容左右边距 16-20px，进度条相应缩短 */
+.energy-rank-card .screen-card-body,
+.monthly-saving-card .screen-card-body {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.energy-rank-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #9e9e9e;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+}
+
+.energy-rank-list {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  min-height: 0;
+}
+
+.energy-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rank-badge {
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: skewX(-12deg);
+  font-size: 14px;
+  color: #fffefe;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+  text-align: center;
+}
+
+.rank-badge .rank-badge-inner {
+  transform: skewX(12deg);
+  display: block;
+}
+
+.rank-badge--orange {
+  background-color: #ff7a38;
+}
+.rank-badge--yellow {
+  background-color: #feb603;
+}
+.rank-badge--green {
+  background-color: #3aa964;
+}
+
+.rank-month {
+  width: 32px;
+  flex-shrink: 0;
+  font-size: 14px;
+  color: #4f5352;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+}
+
+.rank-progress-wrap {
+  flex: 1;
+  min-width: 60px;
+  height: 10px;
+  display: flex;
+  background-color: #e8e8e8;
+  filter: drop-shadow(0 1px 2.5px rgba(147, 181, 173, 0.51));
+  overflow: hidden;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+.rank-progress-fill {
+  height: 100%;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+.rank-progress-fill--orange {
+  background-image: linear-gradient(90deg, #ffffff 0%, #ff7937 99%, #ff7937 100%);
+}
+
+.rank-progress-fill--yellow {
+  background-image: linear-gradient(90deg, #ffffff 0%, #fdb503 98%, #fdb503 100%);
+}
+
+.rank-progress-fill--green {
+  background-image: linear-gradient(90deg, #b3ebb9 0%, #41b983 99%, #41b983 100%);
+}
+
+/* 节电量部分：白色 */
+.rank-progress-fill--saving {
+  background: #ffffff;
+}
+
+.rank-value {
+  flex-shrink: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: bold;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-value--orange {
+  color: #ff7a38;
+}
+.rank-value--yellow {
+  color: #feb603;
+}
+.rank-value--green {
+  color: #2b9e56;
+}
+
+.monthly-saving-card .rank-progress-wrap {
+  flex: 1;
+  min-width: 50px;
+}
+
+/* 效率指标环 - ECharts 绘制 */
+.efficiency-indicators {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+}
+
+.efficiency-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.efficiency-label {
+  font-size: 12px;
+  color: #4f5352;
+  font-family: 'Microsoft Ya Hei', sans-serif;
+  text-align: center;
+  line-height: 1.4;
+  white-space: pre-line;
+}

@@ -1,0 +1,22 @@
+/* 响应式断点 */
+/* 移动端: < 768px */
+/* 平板: 768px - 1024px */
+/* 桌面: > 1024px */
+
+@media (max-width: 1024px) {
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  
+  #app {
+    overflow: visible;
+  }
+}

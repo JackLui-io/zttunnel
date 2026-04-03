@@ -1,0 +1,59 @@
+/* 登录页标题字体：青鸟华光简大标宋 */
+@font-face {
+  font-family: 'QingNiaoHuaGuangJianDaBiaoSong';
+  src: url('/fonts/QingNiaoHuaGuangJianDaBiaoSong-2.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --login-bg-image: url('/bg5.png');
+  --login-bg-color: #0f7f62;
+  --login-title-color: #ffffff;
+  --login-card-shadow: 0 0 10px rgba(188, 188, 188, 0.3);
+  --login-input-bg: #ffffff;
+  --login-input-placeholder: #898989;
+  --login-icon-color: #949494;
+  --login-button-bg: #167428;
+  --login-button-text: #ffffff;
+  --login-card-gradient: linear-gradient(127.07deg, rgba(64, 114, 58, 0.65) 4.71%, rgba(255, 255, 255, 0.65) 97.14%);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3e50;
+  background: var(--login-bg-image) center center no-repeat;
+  background-size: cover;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* 大屏页面不使用 bg5 背景 */
+body.data-screen-active {
+  background: #93cba7;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
