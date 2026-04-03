@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelCarbonDayMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelCarbonDay">
+            <id property="id" column="id" />
+            <result property="cumulativePowerConsumption" column="cumulative_power_consumption" />
+            <result property="dailyPowerConsumption" column="daily_power_consumption" />
+            <result property="maxOutside" column="max_outside" />
+            <result property="powerDataValue" column="power_data_value" />
+            <result property="theoreticalPowerSavingRate" column="theoretical_power_saving_rate" />
+            <result property="theoreticalPowerSavings" column="theoretical_power_savings" />
+            <result property="devicelistId" column="devicelist_id" />
+            <result property="uploadTime" column="upload_time" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,cumulative_power_consumption,daily_power_consumption,max_outside,power_data_value,theoretical_power_saving_rate,
+        theoretical_power_savings,devicelist_id,upload_time
+    </sql>
+</mapper>

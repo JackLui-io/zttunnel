@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelLampsEdgeComputingMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelLampsEdgeComputing">
+            <result property="uniqueId" column="unique_id" jdbcType="BIGINT"/>
+            <result property="deviceId" column="device_id" jdbcType="INTEGER"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        unique_id,device_id
+    </sql>
+</mapper>

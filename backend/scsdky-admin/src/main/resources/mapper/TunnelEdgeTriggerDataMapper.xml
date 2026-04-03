@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelEdgeTriggerDataMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelEdgeTriggerData">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="devicelistId" column="devicelist_id" jdbcType="BIGINT"/>
+            <result property="loraStatus" column="lora_status" jdbcType="TINYINT"/>
+            <result property="loraStatusBak" column="lora_status_bak" jdbcType="TINYINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,devicelist_id,lora_status,
+        lora_status_bak,upload_time
+    </sql>
+</mapper>

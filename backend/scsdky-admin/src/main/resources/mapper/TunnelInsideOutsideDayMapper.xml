@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelInsideOutsideDayMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelInsideOutsideDay">
+            <id property="id" column="id" />
+            <result property="tunnelId" column="tunnel_id" />
+            <result property="lightUp" column="light_up" />
+            <result property="lightDown" column="light_down" />
+            <result property="maxOutside" column="max_outside" />
+            <result property="minOutside" column="min_outside" />
+            <result property="avgOutside" column="avg_outside" />
+            <result property="outsideLightValue" column="outside_light_value" />
+            <result property="maxDimmingRadio" column="max_dimming_radio" />
+            <result property="devicelistId" column="devicelist_id" />
+            <result property="minDimmingRadio" column="min_dimming_radio" />
+            <result property="avgDimmingRadio" column="avg_dimming_radio" />
+            <result property="uploadTime" column="upload_time" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,light_up,light_down,max_outside,min_outside,avg_outside,
+        outside_light_value,max_dimming_radio,devicelist_id,min_dimming_radio,avg_dimming_radio,
+        upload_time,tunnel_id
+    </sql>
+
+    <!-- 本月用户隧道亮灯时长总和（light_up 单位已是小时，与 tunnel_inside_outside_day 统计分析一致） -->
+    <select id="selectCurrentMonthLightUpSum" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(CAST(light_up AS DECIMAL(10,2))), 0)
+        FROM tunnel_inside_outside_day
+        WHERE tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND upload_time &gt;= #{startDate}
+        AND upload_time &lt;= #{endDate}
+    </select>
+
+    <!-- 本月各隧道有亮灯数据的天数（与统计分析口径一致） -->
+    <select id="selectCurrentMonthDataDaysByTunnel" resultType="com.scsdky.web.domain.vo.dashboard.TunnelLightingDaysVo">
+        SELECT tunnel_id AS tunnelId, COUNT(*) AS daysInMonth
+        FROM tunnel_inside_outside_day
+        WHERE tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND upload_time &gt;= #{startDate}
+        AND upload_time &lt;= #{endDate}
+        GROUP BY tunnel_id
+    </select>
+</mapper>

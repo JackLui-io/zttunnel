@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelLightOutsideMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelLightOutside">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+            <result property="maxOutside" column="max_outside" jdbcType="INTEGER"/>
+            <result property="minOutside" column="min_outside" jdbcType="INTEGER"/>
+            <result property="avgOutside" column="avg_outside" jdbcType="INTEGER"/>
+            <result property="lightUp" column="light_up" jdbcType="INTEGER"/>
+            <result property="lightDown" column="light_down" jdbcType="INTEGER"/>
+            <result property="maxDimmingRadio" column="max_dimming_radio" jdbcType="VARCHAR"/>
+            <result property="minDimmingRadio" column="min_dimming_radio" jdbcType="VARCHAR"/>
+            <result property="avgDimmingRadio" column="avg_dimming_radio" jdbcType="VARCHAR"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_id,upload_time,
+        max_outside,min_outside,light_up,
+        light_down,max_dimming_radio,min_dimming_radio,
+        create_time,update_time
+    </sql>
+    <select id="insideAndOutside" resultType="com.scsdky.web.domain.vo.InsideAndOutsideVo">
+        select
+            <if test="isHour != null and isHour == 1 ">
+                HOUR(upload_time) upload_time ,
+            </if>
+            <if test="isHour != null and isHour == 0 ">
+                date(upload_time) upload_time,
+            </if>
+            <if test="isHour != null and isHour == 2 ">
+                date_format(upload_time,'%Y-%m-%d %H:%i:%s') upload_time,
+                luminance outsideLightValue,
+                dimming_ratio dimmingRadioValue
+            </if>
+        <if test="isHour != null and isHour != 2 ">
+                devicelist_id,
+                max(luminance) max_outside,
+                min(luminance) min_outside,
+                REPLACE(FORMAT(avg(luminance),2),',','') as avg_outside,
+                max(dimming_ratio) max_dimming_radio,
+                min(dimming_ratio) min_dimming_radio,
+                REPLACE(FORMAT(avg(dimming_ratio),2),',','') as avg_dimming_radio
+        </if>
+        from tunnel_edge_compute_data
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            <if test="time != null">
+                upload_time &gt;=concat(#{time},' 00:00:00') and upload_time &lt;=concat(#{time},' 23:59:59')
+            </if>
+            and devicelist_id = #{deviceListId}
+        </where>
+        <if test="isHour != null and isHour == 1 ">
+            GROUP BY HOUR(upload_time) ORDER BY upload_time DESC
+        </if>
+        <if test="isHour != null and isHour == 0 ">
+            GROUP BY date(upload_time) ORDER BY upload_time DESC
+        </if>
+        <if test="isHour != null and isHour == 2 ">
+            ORDER BY upload_time DESC
+        </if>
+    </select>
+    <select id="zdByHouse" resultType="com.scsdky.web.domain.vo.monitor.LightOutsideVo">
+        <!-- ========== 原代码（已注释）========== -->
+        <!-- 原 SQL 在 GROUP BY 中只按 hour 分组，但 SELECT 中还有 dimming_ratio 和 luminance -->
+        <!-- 这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+        <!-- SELECT
+        concat( date_format( upload_time, '%H:' ), floor( date_format( upload_time, '%i' ) / 5 ) * 5 ) AS hour,
+        tecd.dimming_ratio dimmingRadio,
+        tecd.luminance outside
+        FROM
+        (select upload_time,dimming_ratio,devicelist_id,lighting_time,luminance from tunnel_edge_compute_data
+        WHERE upload_time &gt;=concat(#{time},' 00:00:00') and upload_time &lt;=concat(#{time},' 23:59:59')  and devicelist_id = #{deviceListId})  AS tecd
+        GROUP BY hour ORDER BY hour; -->
+        
+        <!-- ========== 新代码 ========== -->
+        <!-- 修复：使用聚合函数处理非分组列，符合 MySQL ONLY_FULL_GROUP_BY 模式 -->
+        <!-- 按 5 分钟间隔分组，取每个时间段内的平均值 -->
+        SELECT
+        concat( date_format( upload_time, '%H:' ), floor( date_format( upload_time, '%i' ) / 5 ) * 5 ) AS hour,
+        AVG(tecd.dimming_ratio) dimmingRadio,
+        AVG(tecd.luminance) outside
+        FROM
+        (select upload_time,dimming_ratio,devicelist_id,lighting_time,luminance from tunnel_edge_compute_data
+        WHERE upload_time &gt;=concat(#{time},' 00:00:00') and upload_time &lt;=concat(#{time},' 23:59:59')  and devicelist_id = #{deviceListId})  AS tecd
+        GROUP BY hour ORDER BY hour;
+
+    </select>
+    <select id="getAvgData" resultType="com.scsdky.web.domain.vo.LightCountVo">
+        SELECT  ROUND(avg(max_outside),2) avgOutside,ROUND(avg(light_up),2) avgLight from t_tunnel_light_outside
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+    </select>
+</mapper>

@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelTrafficFlowMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelTrafficFlow">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+            <result property="trafficFlow" column="traffic_flow" jdbcType="INTEGER"/>
+            <result property="maxSpeed" column="max_speed" jdbcType="INTEGER"/>
+            <result property="minSpeed" column="min_speed" jdbcType="INTEGER"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+        <result property="avgSpeed" column="avg_speed" jdbcType="DOUBLE"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_id,upload_time,traffic_flow,
+        max_speed,min_speed,create_time,
+        update_time
+    </sql>
+
+
+    <select id="trafficFlowOrSpeed" resultType="com.scsdky.web.domain.vo.TrafficFlowOrSpeedVo">
+
+        <if test="isHour != null and isHour == 1 ">
+            select  HOUR(upload_time) upload_time ,
+            FLOOR(sum(traffic_flow)) traffic_flow,
+            MAX(traffic_flow) max_traffic_flow,
+            MIN(traffic_flow) min_traffic_flow,
+            avg(traffic_flow) avgTrafficFlow ,
+        </if>
+        <if test="isHour != null and isHour == 0 ">
+            <!-- ========== 原代码（已注释）========== -->
+            <!-- 原 SQL 在外层查询中 SELECT 了 a.upload_time, a.max_speed, a.min_speed, a.avg_speed, a.devicelist_id -->
+            <!-- 但 GROUP BY 只有 b.upload_day，这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+            <!-- select a.upload_time,
+            a.max_speed,
+            a.min_speed,
+            cast( a.avg_speed AS  SIGNED)  avg_speed,
+            a.devicelist_id,
+            SUM(b.hourSumTraffic) traffic_flow,
+            MAX(b.hourSumTraffic) max_traffic_flow,
+            MIN(b.hourSumTraffic) min_traffic_flow ,
+            FLOOR(AVG(b.hourSumTraffic)) avgTrafficFlow
+            from (...)
+            where a.upload_time = b.upload_day  GROUP BY b.upload_day -->
+            
+            <!-- ========== 新代码 ========== -->
+            <!-- 修复：将所有非聚合列添加到 GROUP BY 中 -->
+            <!-- 由于 a.upload_time = b.upload_day，所以可以按 b.upload_day 分组，但需要将 a 的其他列也加入 GROUP BY -->
+            select a.upload_time,
+            a.max_speed,
+            a.min_speed,
+            cast( a.avg_speed AS  SIGNED)  avg_speed,
+            a.devicelist_id,
+            SUM(b.hourSumTraffic) traffic_flow,
+            MAX(b.hourSumTraffic) max_traffic_flow,
+            MIN(b.hourSumTraffic) min_traffic_flow ,
+            FLOOR(AVG(b.hourSumTraffic)) avgTrafficFlow
+            from (
+                select date(upload_time) upload_time,
+        </if>
+            devicelist_id,
+            MAX( max_value ) AS max_speed,
+            MIN( min_value ) AS min_speed,
+            IFNULL(FORMAT((SUM(COALESCE(speed1, 0)) + SUM(COALESCE(speed2, 0)) + SUM(COALESCE(speed3, 0)) + SUM(COALESCE(speed4, 0)) + SUM(COALESCE(speed5, 0)) + SUM(COALESCE(speed6, 0)) + SUM(COALESCE(speed7, 0)) + SUM(COALESCE(speed8, 0)) + SUM(COALESCE(speed9, 0))
+            + SUM(COALESCE(speed10, 0))+ SUM(COALESCE(speed11, 0))+ SUM(COALESCE(speed12, 0))+ SUM(COALESCE(speed13, 0))+ SUM(COALESCE(speed14, 0))+ SUM(COALESCE(speed15, 0))+ SUM(COALESCE(speed16, 0))+ SUM(COALESCE(speed17, 0))+ SUM(COALESCE(speed18, 0))+ SUM(COALESCE(speed19, 0))+ SUM(COALESCE(speed20, 0)))	 /
+
+            (count(speed1) + count(speed2) + count(speed3) + count(speed4) + count(speed5) + count(speed6) + count(speed7) + count(speed8) + count(speed9)
+            + count(speed10)+ count(speed11)+ count(speed12)+ count(speed13)+ count(speed14)+ count(speed15)+ count(speed16)+ count(speed17)+ count(speed18)+ count(speed19)+ count(speed20)) ,0) ,0) as avg_speed
+            FROM
+            ( SELECT  traffic_flow,upload_time,devicelist_id,
+            GREATEST(abs(speed1),abs(speed2),abs(speed3)
+            ,abs(speed4),abs(speed5),abs(speed6),abs(speed7),abs(speed8),abs(speed9),abs(speed10),abs(speed11),abs(speed12),abs(speed13),abs(speed14)
+            ,abs(speed15),abs(speed16),abs(speed17),abs(speed18),abs(speed19),abs(speed20)) AS max_value,
+            LEAST(IF(abs(speed1) != 0,abs(speed1),999),if(abs(speed2),abs(speed2),999),if(abs(speed3),abs(speed3),999)
+            ,if(abs(speed4),abs(speed4),999),if(abs(speed5),abs(speed5),999),if(abs(speed6),abs(speed6),999),if(abs(speed7),abs(speed7),999),if(abs(speed8),abs(speed8),999),if(abs(speed9),abs(speed9),999),if(abs(speed10),abs(speed10),999),if(abs(speed11),abs(speed11),999),if(abs(speed12),abs(speed12),999),if(abs(speed13),abs(speed13),999),if(abs(speed14),abs(speed14),999)
+            ,if(abs(speed15),abs(speed15),999),if(abs(speed16),abs(speed16),999),if(abs(speed17),abs(speed17),999),if(abs(speed18),abs(speed18),999),if(abs(speed19),abs(speed19),999),if(abs(speed20),abs(speed20),999)) AS min_value,
+            CASE WHEN speed1 != 0 THEN speed1 else null end as speed1 ,
+            CASE WHEN speed2 != 0 THEN speed2 else null end as speed2 ,
+            CASE WHEN speed3 != 0 THEN speed3 else null end as speed3,
+            CASE WHEN speed4 != 0 THEN speed4 else null end as speed4,
+            CASE WHEN speed5 != 0 THEN speed5 else null end as speed5,
+            CASE WHEN speed6 != 0 THEN speed6 else null end as speed6,
+            CASE WHEN speed7 != 0 THEN speed7 else null end as speed7,
+            CASE WHEN speed8 != 0 THEN speed8 else null end as speed8,
+            CASE WHEN speed9 != 0 THEN speed9 else null end as speed9,
+            CASE WHEN speed10 != 0 THEN speed10 else null end as speed10,
+            CASE WHEN speed11 != 0 THEN speed11 else null end as speed11,
+            CASE WHEN speed12 != 0 THEN speed12 else null end as speed12,
+            CASE WHEN speed13 != 0 THEN speed13 else null end as speed13,
+            CASE WHEN speed14 != 0 THEN speed14 else null end as speed14,
+            CASE WHEN speed15 != 0 THEN speed15 else null end as speed15,
+            CASE WHEN speed16 != 0 THEN speed16 else null end as speed16,
+            CASE WHEN speed17 != 0 THEN speed17 else null end as speed17,
+            CASE WHEN speed18 != 0 THEN speed18 else null end as speed18,
+            CASE WHEN speed19 != 0 THEN speed19 else null end as speed19,
+            CASE WHEN speed20 != 0 THEN speed20 else null end as speed20
+                FROM tunnel_edge_compute_data
+            <where>
+                <if test="startTime != null and startTime != ''">
+                    AND upload_time &gt;= #{startTime}
+                </if>
+                <if test="endTime != null and endTime != ''">
+                    AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+                </if>
+                <if test="time != null">
+                    AND upload_time &gt;= concat(#{time},' 00:00:00') AND upload_time &lt;= concat(#{time},' 23:59:59')
+                </if>
+                <if test="deviceListId != null">
+                    and devicelist_id = #{deviceListId}
+                </if>
+                 and edge_compute_status0 = 0
+            </where>
+            ) AS subquery
+        <if test="isHour != null and isHour == 1 ">
+            GROUP BY HOUR(upload_time) ORDER BY upload_time DESC
+        </if>
+        <if test="isHour != null and isHour == 0 ">
+            GROUP BY date(upload_time), devicelist_id ORDER BY date(upload_time) DESC) a,
+            (SELECT
+            <!-- ========== 原代码（已注释）========== -->
+            <!-- 原 SQL 在子查询 b 中 SELECT 了 upload_time，但 GROUP BY 只有 upload_day,upload_hour -->
+            <!-- 这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+            <!-- date(upload_time) upload_day, HOUR(upload_time) AS upload_hour,upload_time, -->
+            
+            <!-- ========== 新代码 ========== -->
+            <!-- 修复：移除 upload_time，因为外层查询没有使用它，或者使用聚合函数 -->
+            date(upload_time) upload_day, HOUR(upload_time) AS upload_hour,
+            MAX(traffic_flow) as traffic_flow,
+            FLOOR(SUM(traffic_flow)) hourSumTraffic
+            FROM tunnel_edge_compute_data
+            <where>
+                <if test="startTime != null and startTime != ''">
+                    AND upload_time &gt;= #{startTime}
+                </if>
+                <if test="endTime != null and endTime != ''">
+                    AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+                </if>
+                <if test="time != null">
+                    AND upload_time &gt;= concat(#{time},' 00:00:00') AND upload_time &lt;= concat(#{time},' 23:59:59')
+                </if>
+                <if test="deviceListId != null">
+                    and devicelist_id = #{deviceListId}
+                </if>
+            </where>
+            and edge_compute_status0 = 0 GROUP BY upload_day,upload_hour ORDER BY upload_hour) b
+            where a.upload_time = b.upload_day  GROUP BY a.upload_time, a.max_speed, a.min_speed, a.avg_speed, a.devicelist_id, b.upload_day
+        </if>
+    </select>
+    <select id="clByHouse" resultType="com.scsdky.web.domain.vo.monitor.TrafficVo">
+        SELECT HOUR(upload_time) as hour,
+        SUM(traffic_flow) as traffic_flow
+        FROM tunnel_edge_compute_data
+        WHERE
+            upload_time &gt;= concat(#{time},' 00:00:00')
+            AND upload_time &lt;= concat(#{time},' 23:59:59')
+            AND devicelist_id = #{deviceListId}
+            <if test="entryTrafficLimit != null">
+                AND traffic_flow &lt;= #{entryTrafficLimit}
+            </if>
+        GROUP BY HOUR(upload_time)
+        ORDER BY Hour(upload_time);
+    </select>
+    <select id="csByHouse" resultType="com.scsdky.web.domain.vo.monitor.SpeedVo">
+        SELECT
+            concat( date_format( upload_time, '%H:' ), floor( date_format( upload_time, '%i' ) / 5 ) * 5 ) AS hour,
+	        IFNULL(FORMAT((SUM(COALESCE(speed1, 0)) + SUM(COALESCE(speed2, 0)) + SUM(COALESCE(speed3, 0)) + SUM(COALESCE(speed4, 0)) + SUM(COALESCE(speed5, 0)) + SUM(COALESCE(speed6, 0)) + SUM(COALESCE(speed7, 0)) + SUM(COALESCE(speed8, 0)) + SUM(COALESCE(speed9, 0))
+            + SUM(COALESCE(speed10, 0))+ SUM(COALESCE(speed11, 0))+ SUM(COALESCE(speed12, 0))+ SUM(COALESCE(speed13, 0))+ SUM(COALESCE(speed14, 0))+ SUM(COALESCE(speed15, 0))+ SUM(COALESCE(speed16, 0))+ SUM(COALESCE(speed17, 0))+ SUM(COALESCE(speed18, 0))+ SUM(COALESCE(speed19, 0))+ SUM(COALESCE(speed20, 0))) /
+            (count(speed1) + count(speed2) + count(speed3) + count(speed4) + count(speed5) + count(speed6) + count(speed7) + count(speed8) + count(speed9)
+            + count(speed10)+ count(speed11)+ count(speed12)+ count(speed13)+ count(speed14)+ count(speed15)+ count(speed16)+ count(speed17)+ count(speed18)+ count(speed19)+ count(speed20)) ,0) ,0) as avg_speed
+        FROM (
+            select upload_time,
+            CASE
+            WHEN speed1 != 0
+            <if test="entrySpeedLimit != null">AND speed1 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed1)
+            ELSE null
+            END AS speed1,
+            CASE
+            WHEN speed2 != 0
+            <if test="entrySpeedLimit != null">AND speed2 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed2)
+            ELSE null
+            END AS speed2,
+            CASE
+            WHEN speed3 != 0
+            <if test="entrySpeedLimit != null">AND speed3 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed3)
+            ELSE null
+            END AS speed3,
+            CASE
+            WHEN speed4 != 0
+            <if test="entrySpeedLimit != null">AND speed4 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed4)
+            ELSE null
+            END AS speed4,
+            CASE
+            WHEN speed5 != 0
+            <if test="entrySpeedLimit != null">AND speed5 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed5)
+            ELSE null
+            END AS speed5,
+            CASE
+            WHEN speed6 != 0
+            <if test="entrySpeedLimit != null">AND speed6 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed6)
+            ELSE null
+            END AS speed6,
+            CASE
+            WHEN speed7 != 0
+            <if test="entrySpeedLimit != null">AND speed7 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed7)
+            ELSE null
+            END AS speed7,
+            CASE
+            WHEN speed8 != 0
+            <if test="entrySpeedLimit != null">AND speed8 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed8)
+            ELSE null
+            END AS speed8,
+            CASE
+            WHEN speed9 != 0
+            <if test="entrySpeedLimit != null">AND speed9 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed9)
+            ELSE null
+            END AS speed9,
+            CASE
+            WHEN speed10 != 0
+            <if test="entrySpeedLimit != null">AND speed10 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed10)
+            ELSE null
+            END AS speed10,
+            CASE
+            WHEN speed11 != 0
+            <if test="entrySpeedLimit != null">AND speed11 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed11)
+            ELSE null
+            END AS speed11,
+            CASE
+            WHEN speed12 != 0
+            <if test="entrySpeedLimit != null">AND speed12 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed12)
+            ELSE null
+            END AS speed12,
+            CASE
+            WHEN speed13 != 0
+            <if test="entrySpeedLimit != null">AND speed13 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed13)
+            ELSE null
+            END AS speed13,
+            CASE
+            WHEN speed14 != 0
+            <if test="entrySpeedLimit != null">AND speed14 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed14)
+            ELSE null
+            END AS speed14,
+            CASE
+            WHEN speed15 != 0
+            <if test="entrySpeedLimit != null">AND speed15 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed15)
+            ELSE null
+            END AS speed15,
+            CASE
+            WHEN speed16 != 0
+            <if test="entrySpeedLimit != null">AND speed16 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed16)
+            ELSE null
+            END AS speed16,
+            CASE
+            WHEN speed17 != 0
+            <if test="entrySpeedLimit != null">AND speed17 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed17)
+            ELSE null
+            END AS speed17,
+            CASE
+            WHEN speed18 != 0
+            <if test="entrySpeedLimit != null">AND speed18 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed18)
+            ELSE null
+            END AS speed18,
+            CASE
+            WHEN speed19 != 0
+            <if test="entrySpeedLimit != null">AND speed19 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed19)
+            ELSE null
+            END AS speed19,
+            CASE
+            WHEN speed20 != 0
+            <if test="entrySpeedLimit != null">AND speed20 &lt;= #{entrySpeedLimit}</if>
+            THEN ABS(speed20)
+            ELSE null
+            END AS speed20
+        FROM tunnel_edge_compute_data
+        WHERE upload_time &gt;= concat(#{time},' 00:00:00')
+        AND upload_time &lt;= concat(#{time},' 23:59:59')
+        AND devicelist_id = #{deviceListId} ) a
+        GROUP BY hour ORDER BY hour;
+    </select>
+    <select id="getAvgData" resultType="com.scsdky.web.domain.vo.TrafficFlowCountVo">
+        SELECT  ROUND(avg(traffic_flow),2) trafficFlow, ROUND(avg(max_speed),2) avgSpeed  FROM t_tunnel_traffic_flow
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+    </select>
+    <select id="getHourTraffic" resultType="com.scsdky.web.domain.vo.monitor.TrafficVo">
+        select DATE_FORMAT(upload_time,'%Y-%m-%d %H') hourUpload,SUM(traffic_flow) totalFlow from tunnel_edge_compute_data
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            and devicelist_id = #{deviceListId}
+        </where>
+        GROUP BY DATE_FORMAT(upload_time,'%Y-%m-%d %H') ORDER BY DATE_FORMAT(upload_time,'%Y-%m-%d %H') asc
+    </select>
+    <select id="getAllSpeedByQuery" resultType="com.scsdky.web.domain.vo.monitor.TrafficSpeedVo">
+        select
+        DATE_FORMAT(upload_time,'%Y-%m-%d %H') upload_hour,upload_time,
+        CONCAT(
+        speed1,
+        ',',
+        speed2,
+        ',',
+        speed3,
+        ',',
+        speed4,
+        ',',
+        speed5,
+        ',',
+        speed6,
+        ',',
+        speed7,
+        ',',
+        speed8,
+        ',',
+        speed9,
+        ',',
+        speed10,
+        ',',
+        speed11,
+        ',',
+        speed12,
+        ',',
+        speed13,
+        ',',
+        speed14,
+        ',',
+        speed15,
+        ',',
+        speed16,
+        ',',
+        speed17,
+        ',',
+        speed18,
+        ',',
+        speed19,
+        ',',
+        speed20
+        ) AS speed
+        from tunnel_edge_compute_data
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            and devicelist_id = #{deviceListId}
+        </where>
+        ORDER BY DATE_FORMAT(upload_time,'%Y-%m-%d %H') asc
+    </select>
+</mapper>

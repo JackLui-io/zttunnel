@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelLampsTerminalMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelLampsTerminal">
+            <id property="uniqueId" column="unique_id" jdbcType="BIGINT"/>
+            <result property="deviceId" column="device_id" jdbcType="INTEGER"/>
+            <result property="deviceProperty" column="device_property" jdbcType="INTEGER"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        unique_id,device_id,device_property
+    </sql>
+    <select id="getDeviceLamp" resultType="com.scsdky.web.domain.TunnelLampsTerminal">
+
+        select a.* from tunnel_lamps_terminal a
+        LEFT JOIN tunnel_lamps_edge_computing b
+        on a.unique_id = b.unique_id where devicelist_id = #{tunnelDevicelistTunnelinfo.devicelistId}
+        <if test="deviceDto.zone != null ">
+             and a.zone = #{deviceDto.zone}
+        </if>
+        <if test="deviceDto.keyword != null and deviceDto.keyword != ''">
+            AND a.loop_number like concat('%',#{deviceDto.keyword},'%')
+        </if>
+    </select>
+
+    <select id="selectListByVersion" resultType="com.scsdky.web.domain.dto.DeviceListDto">
+        SELECT tlt.device_id,
+               tlt.loop_number AS deviceName,
+               tlt.version,
+               ttnr.id AS tunnelId
+        FROM tunnel_lamps_terminal tlt
+        LEFT JOIN tunnel_lamps_edge_computing tlec ON tlec.unique_id = tlt.unique_id
+        LEFT JOIN tunnel_devicelist_tunnelinfo tdt ON tlec.devicelist_id = tdt.devicelist_id
+        LEFT JOIN t_tunnel_name_result ttnr ON tdt.tunnel_id = ttnr.id
+        WHERE ttnr.status = 0 AND tlt.version = #{version}
+        ORDER BY ttnr.create_time
+    </select>
+
+    <select id="queryTunnelDevicelistTunnelinfo" resultType="com.scsdky.web.domain.TunnelDevicelistTunnelinfo">
+        SELECT tdt.*
+        FROM tunnel_lamps_terminal tlt
+                 LEFT JOIN tunnel_lamps_edge_computing tlec ON tlec.unique_id = tlt.unique_id
+                 LEFT JOIN tunnel_devicelist_tunnelinfo tdt ON tlec.devicelist_id = tdt.devicelist_id
+                 LEFT JOIN t_tunnel_name_result ttnr ON tdt.tunnel_id = ttnr.id
+        WHERE tlt.unique_id = #{uniqueId}
+    </select>
+</mapper>

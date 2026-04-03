@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelEleMeterMapper">
+
+
+    <sql id="Base_Column_List">
+        tem.id,tem.device_num,tem.quantity_ele, tem.power, tem.create_time,tem.upload_time
+    </sql>
+    <select id="selectEleMeterByTunnelId" resultType="com.scsdky.web.domain.TunnelEleMeter">
+        select <include refid="Base_Column_List" /> from tunnel_ele_meter
+        tem
+        left join t_tunnel_device ttd on ttd.device_id = tem.device_num
+        where tem.upload_time &gt;= #{startTime} and tem.upload_time &lt;= CONCAT(#{endTime},' 23:59:59')
+        and ttd.tunnel_id = #{tunnelId}
+        order by id asc
+    </select>
+
+
+</mapper>

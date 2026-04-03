@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelPowerMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelPower">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="deviceId" column="device_id" jdbcType="BIGINT"/>
+            <result property="voltage" column="voltage" jdbcType="FLOAT"/>
+            <result property="current" column="current" jdbcType="FLOAT"/>
+            <result property="alarmVoltagelow" column="alarm_voltageLow" jdbcType="VARCHAR"/>
+            <result property="alarmVoltageHigh" column="alarm_voltage_high" jdbcType="VARCHAR"/>
+            <result property="devicelistId" column="devicelist_id" jdbcType="BIGINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,device_id,voltage,
+        current,alarm_voltageLow,alarm_voltage_high,
+        devicelist_id
+    </sql>
+</mapper>

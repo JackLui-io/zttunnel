@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelDevicelistMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelDevicelist">
+            <id property="deviceId" column="device_id" jdbcType="BIGINT"/>
+            <result property="devicePassword" column="device_password" jdbcType="BIGINT"/>
+            <result property="deviceTypeId" column="device_type_id" jdbcType="BOOLEAN"/>
+            <result property="csq" column="csq" jdbcType="INTEGER"/>
+            <result property="nickName" column="nick_name" jdbcType="VARCHAR"/>
+            <result property="lastUpdate" column="last_update" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        device_id,device_password,device_type_id,
+        csq,nick_name,last_update
+    </sql>
+
+    <select id="selectListByVersion" resultType="com.scsdky.web.domain.dto.DeviceListDto">
+        SELECT td.device_id,
+               td.nick_name AS deviceName,
+               td.version,
+               ttnr.id AS tunnelId
+        FROM tunnel_devicelist td
+        LEFT JOIN tunnel_devicelist_tunnelinfo tdt ON td.device_id = devicelist_id
+        LEFT JOIN t_tunnel_name_result ttnr ON tdt.tunnel_id = ttnr.id
+        WHERE ttnr.status = 0 AND td.version = #{version} AND td.device_type_id = #{deviceTypeId}
+        ORDER BY ttnr.create_time
+    </select>
+
+    <!-- Dashboard 设备状态分布：按用户隧道统计，COUNT(DISTINCT) 避免同一设备关联多隧道时重复统计 -->
+    <select id="countDeviceStatusByUserId" resultType="com.scsdky.web.domain.vo.DeviceTypeVo">
+        SELECT COUNT(DISTINCT td.device_id) AS deviceCount,
+               COUNT(DISTINCT CASE WHEN td.Online = 0 THEN td.device_id END) AS deviceOnline,
+               COUNT(DISTINCT CASE WHEN td.Online = 1 THEN td.device_id END) AS deviceOffline,
+               COUNT(DISTINCT CASE WHEN td.device_status = '故障' THEN td.device_id END) AS deviceBreakdown
+        FROM tunnel_devicelist td
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON td.device_id = tdi.devicelist_id AND tdi.type = 2
+        INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+    </select>
+
+    <!-- Dashboard 设备状态分布：admin 全量，COUNT(DISTINCT) 避免重复统计 -->
+    <select id="countDeviceStatusAll" resultType="com.scsdky.web.domain.vo.DeviceTypeVo">
+        SELECT COUNT(DISTINCT td.device_id) AS deviceCount,
+               COUNT(DISTINCT CASE WHEN td.Online = 0 THEN td.device_id END) AS deviceOnline,
+               COUNT(DISTINCT CASE WHEN td.Online = 1 THEN td.device_id END) AS deviceOffline,
+               COUNT(DISTINCT CASE WHEN td.device_status = '故障' THEN td.device_id END) AS deviceBreakdown
+        FROM tunnel_devicelist td
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON td.device_id = tdi.devicelist_id AND tdi.type = 2
+    </select>
+</mapper>

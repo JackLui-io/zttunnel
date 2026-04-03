@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelEnergyCarbonMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelEnergyCarbon">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="time" column="time" jdbcType="TIMESTAMP"/>
+            <result property="dailyPowerConsumption" column="daily_power_consumption" jdbcType="VARCHAR"/>
+            <result property="cumulativePowerConsumption" column="cumulative_power_consumption" jdbcType="VARCHAR"/>
+            <result property="totalPowerSavings" column="total_power_savings" jdbcType="VARCHAR"/>
+            <result property="ratio" column="ratio" jdbcType="VARCHAR"/>
+            <result property="plantTrees" column="plant_trees" jdbcType="VARCHAR"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_id,time,
+        daily_power_consumption,cumulative_power_consumption,total_power_savings,
+        ratio,plant_trees,create_time,
+        update_time
+    </sql>
+    <select id="carbon" resultType="com.scsdky.web.domain.vo.EnergyCarbonVo">
+        select
+        <if test="isHour != null and isHour == 1 ">
+            HOUR(upload_time) upload_time ,
+        </if>
+        <if test="isHour != null and isHour == 0 ">
+            date(upload_time) upload_time,
+        </if>
+        daily_power_consumption,
+        daily_power_saving_rate,
+        cumulative_power_consumption,
+        total_power_savings,  ratio, plant_trees
+        from t_tunnel_energy_carbon
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &lt;= #{endTime}
+            </if>
+            <if test="time != null">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') = #{time}
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+        <if test="isHour != null and isHour == 1 ">
+            GROUP BY HOUR(upload_time) ORDER BY upload_time DESC
+        </if>
+        <if test="isHour != null and isHour == 0 ">
+            GROUP BY date(upload_time) ORDER BY upload_time DESC
+        </if>
+    </select>
+</mapper>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TTunnelNoticeMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelNotice">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="content" column="content" jdbcType="VARCHAR"/>
+            <result property="type" column="type" jdbcType="BOOLEAN"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,content,type,
+        create_time,update_time
+    </sql>
+    <select id="countByTunnel" resultType="com.scsdky.web.domain.vo.NoticeNumVo">
+        select DISTINCT count(1) num ,b.tunnel_name tunnel_name,a.tunnel_id,
+        (select tunnel_name from t_tunnel_name_result where id = b.parent_id) parent_tunnel_name
+        from t_tunnel_notice a
+        LEFT JOIN t_tunnel_name_result b on a.tunnel_id = b.id
+        LEFT JOIN t_user_tunnel c on b.id = c.tunnel_name_id
+        <where>
+            and a.type != 1 and a.process = 0
+            <if test="userId != null and userId != 1">
+                and c.user_id = #{userId}
+            </if>
+
+            <if test="tunnelId != null ">
+                and a.tunnel_id = #{tunnelId}
+            </if>
+
+            <if test="type != null ">
+                and a.type = #{type}
+            </if>
+        </where>
+        GROUP BY a.tunnel_id,c.user_id
+    </select>
+
+    <!-- Dashboard 待处理统计：4 类 process=0，按用户隧道过滤；admin(userId=1) 不过滤 -->
+    <select id="countPendingByType" resultType="com.scsdky.web.domain.vo.dashboard.DashboardPendingCountsVo">
+        SELECT
+            COALESCE(SUM(CASE WHEN a.type = 1 THEN 1 ELSE 0 END), 0) AS systemNotice,
+            COALESCE(SUM(CASE WHEN a.type = 2 THEN 1 ELSE 0 END), 0) AS operationNotice,
+            COALESCE(SUM(CASE WHEN a.type = 3 THEN 1 ELSE 0 END), 0) AS realtimeAlarm,
+            COALESCE(SUM(CASE WHEN a.type = 4 THEN 1 ELSE 0 END), 0) AS deviceAlarm
+        FROM t_tunnel_notice a
+        <if test="userId != null and userId != 1">
+            INNER JOIN t_user_tunnel u ON a.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        </if>
+        WHERE a.process = 0
+          AND a.create_time &gt;= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    </select>
+
+    <!-- Dashboard 消息通知：按 type 查询，最近7天 process=0 -->
+    <select id="selectNoticeListByType" resultType="com.scsdky.web.domain.vo.dashboard.DashboardMessageItemVo">
+        SELECT DATE_FORMAT(a.create_time, '%Y-%m-%d %H:%i:%s') AS time,
+               a.content AS text,
+               a.type AS type
+        FROM t_tunnel_notice a
+        <if test="userId != null and userId != 1">
+            INNER JOIN t_user_tunnel u ON a.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        </if>
+        WHERE a.type = #{type} AND a.process = 0
+          AND a.create_time &gt;= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        ORDER BY a.create_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="countNoticeByType" resultType="int">
+        SELECT COUNT(1) FROM t_tunnel_notice a
+        <if test="userId != null and userId != 1">
+            INNER JOIN t_user_tunnel u ON a.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        </if>
+        WHERE a.type = #{type} AND a.process = 0
+          AND a.create_time &gt;= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    </select>
+</mapper>

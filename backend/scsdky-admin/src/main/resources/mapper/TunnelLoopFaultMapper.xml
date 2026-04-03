@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelLoopFaultMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelLoopFault">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelName" column="tunnel_name" jdbcType="VARCHAR"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="zone" column="zone" jdbcType="VARCHAR"/>
+            <result property="loopNumber" column="loop_number" jdbcType="VARCHAR"/>
+            <result property="voltage" column="voltage" jdbcType="INTEGER"/>
+            <result property="occurrenceTime" column="occurrence_time" jdbcType="TIMESTAMP"/>
+            <result property="recoveryTime" column="recovery_time" jdbcType="TIMESTAMP"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+        <result property="expectFailNum" column="expect_fail_num" jdbcType="INTEGER"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_name,tunnel_id,
+        zone,loop_number,voltage,electric,
+        occurrence_time,recovery_time,create_time,
+        update_time
+    </sql>
+    <select id="getLoopListByPage" resultType="com.scsdky.web.domain.TunnelLoopFault">
+        select <include refid="Base_Column_List" />,IF(electric=0,'未启动','')  breakdown
+        from t_tunnel_loop_fault where electric = 0 and tunnel_id = #{tunnelId}
+        union
+        select <include refid="Base_Column_List" />,IF(voltage&gt;=240,'过压','')  breakdown
+        from t_tunnel_loop_fault where voltage &gt; 240 and tunnel_id = #{tunnelId}
+        union
+        select <include refid="Base_Column_List" />,IF(voltage&lt;=200,'失压','')  breakdown
+        from t_tunnel_loop_fault where voltage &lt; 200 and tunnel_id = #{tunnelId}
+        <if test="keyword != null and keyword != ''">
+            AND loop_number like concat('%',#{keyword},'%')
+        </if>
+        <if test="zone != null and zone != ''">
+            AND zone like concat('%',#{zone},'%')
+        </if>
+        order by occurrence_time desc
+    </select>
+    <select id="getLoopList" resultType="com.scsdky.web.domain.TunnelLoopFault">
+        select <include refid="Base_Column_List" /> from t_tunnel_loop_fault
+        where tunnel_id = #{tunnelId}
+        <if test="keyword != null and keyword != ''">
+            AND loop_number like concat('%',#{keyword},'%')
+        </if>
+        <if test="zone != null and zone != ''">
+            AND zone like concat('%',#{zone},'%')
+        </if>
+        AND (voltage&gt;240 or  voltage&lt;200)
+        <if test="loopStatus != null and loopStatus == '过压'">
+            AND voltage&gt;240
+        </if>
+        <if test="loopStatus != null and loopStatus == '失压'">
+            AND voltage&lt;200
+        </if>
+        <if test="loopStatus != null and loopStatus == '未启动'">
+            AND electric=0
+        </if>
+        order by occurrence_time desc
+    </select>
+    <select id="getCountByZone" resultType="com.scsdky.web.domain.vo.LoopCountVo">
+        select sum(expect_fail_num) num , zone from t_tunnel_loop_fault
+        <where>
+            <if test="startTime != null and startTime != '' ">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &lt;= #{endTime}
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+        GROUP BY zone
+    </select>
+</mapper>

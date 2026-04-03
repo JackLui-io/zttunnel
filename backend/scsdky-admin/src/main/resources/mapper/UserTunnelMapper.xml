@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.UserTunnelMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.UserTunnel">
+            <result property="userId" column="user_id" jdbcType="BIGINT"/>
+            <result property="tunnelNameId" column="tunnel_name_id" jdbcType="BIGINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        user_id,tunnel_name_id
+    </sql>
+    <select id="getUserTunnelByLevel" resultType="com.scsdky.web.domain.UserTunnel">
+        select a.* from t_user_tunnel a,t_tunnel_name_result b
+        where a.tunnel_name_id = b.id and b.`level` = 4 and a.user_id = #{userId}
+    </select>
+</mapper>

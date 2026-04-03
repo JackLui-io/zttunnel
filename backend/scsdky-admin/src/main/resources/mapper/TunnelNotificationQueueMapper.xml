@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelNotificationQueueMapper">
+    
+    <resultMap type="com.scsdky.web.domain.TunnelNotificationQueue" id="TunnelNotificationQueueResult">
+        <result property="id" column="id" />
+        <result property="deviceId" column="device_id" />
+        <result property="deviceName" column="device_name" />
+        <result property="deviceType" column="device_type" />
+        <result property="notificationType" column="notification_type" />
+        <result property="recipientEmail" column="recipient_email" />
+        <result property="recipientPhone" column="recipient_phone" />
+        <result property="recipientUserId" column="recipient_user_id" />
+        <result property="content" column="content" />
+        <result property="status" column="status" />
+        <result property="retryCount" column="retry_count" />
+        <result property="errorMessage" column="error_message" />
+        <result property="createTime" column="create_time" />
+        <result property="sendTime" column="send_time" />
+    </resultMap>
+
+    <sql id="selectTunnelNotificationQueueVo">
+        select id, device_id, device_name, device_type, notification_type, 
+               recipient_email, recipient_phone, recipient_user_id, content, 
+               status, retry_count, error_message, create_time, send_time 
+        from tunnel_notification_queue
+    </sql>
+
+    <!-- 查询待发送的通知记录 -->
+    <select id="selectPendingNotifications" parameterType="Integer" resultMap="TunnelNotificationQueueResult">
+        <include refid="selectTunnelNotificationQueueVo"/>
+        where status = 0
+        order by create_time asc
+        <if test="limit != null and limit > 0">
+            limit #{limit}
+        </if>
+    </select>
+
+</mapper>
+

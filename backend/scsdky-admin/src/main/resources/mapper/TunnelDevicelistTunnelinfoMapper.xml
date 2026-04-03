@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelDevicelistTunnelinfoMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelDevicelistTunnelinfo">
+            <id property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="deviceId" column="device_id" jdbcType="BIGINT"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        tunnel_id,device_id
+    </sql>
+
+    <select id="listDistinctTunnelIdByDevicelistIdRange" resultType="java.lang.Long">
+        SELECT DISTINCT tunnel_id
+        FROM tunnel_devicelist_tunnelinfo
+        WHERE devicelist_id &gt;= #{minId}
+          AND devicelist_id &lt;= #{maxId}
+    </select>
+
+    <select id="listDistinctTunnelIdByDevicelistId9916CharPrefix" resultType="java.lang.Long">
+        SELECT DISTINCT tunnel_id
+        FROM tunnel_devicelist_tunnelinfo
+        WHERE CAST(devicelist_id AS CHAR) LIKE '9916%'
+    </select>
+</mapper>

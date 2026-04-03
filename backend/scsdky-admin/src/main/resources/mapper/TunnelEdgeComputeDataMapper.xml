@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelEdgeComputeDataMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelEdgeComputeData">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="devicelistId" column="devicelist_id" jdbcType="BIGINT"/>
+            <result property="edgeComputeStatus0" column="edge_compute_status0" jdbcType="TINYINT"/>
+            <result property="edgeComputeStatus1" column="edge_compute_status1" jdbcType="TINYINT"/>
+            <result property="edgeComputeStatus2" column="edge_compute_status2" jdbcType="TINYINT"/>
+            <result property="edgeComputeStatus3" column="edge_compute_status3" jdbcType="TINYINT"/>
+            <result property="luminance" column="luminance" jdbcType="SMALLINT"/>
+            <result property="trafficFlow" column="traffic_flow" jdbcType="SMALLINT"/>
+            <result property="dimmingRatio" column="dimming_ratio" jdbcType="TINYINT"/>
+            <result property="lightingTime" column="lighting_time" jdbcType="SMALLINT"/>
+            <result property="speed1" column="speed1" jdbcType="SMALLINT"/>
+            <result property="speed2" column="speed2" jdbcType="SMALLINT"/>
+            <result property="speed3" column="speed3" jdbcType="SMALLINT"/>
+            <result property="speed4" column="speed4" jdbcType="SMALLINT"/>
+            <result property="speed5" column="speed5" jdbcType="SMALLINT"/>
+            <result property="speed6" column="speed6" jdbcType="SMALLINT"/>
+            <result property="speed7" column="speed7" jdbcType="SMALLINT"/>
+            <result property="speed8" column="speed8" jdbcType="SMALLINT"/>
+            <result property="speed9" column="speed9" jdbcType="SMALLINT"/>
+            <result property="speed10" column="speed10" jdbcType="SMALLINT"/>
+            <result property="speed11" column="speed11" jdbcType="SMALLINT"/>
+            <result property="speed12" column="speed12" jdbcType="SMALLINT"/>
+            <result property="speed13" column="speed13" jdbcType="SMALLINT"/>
+            <result property="speed14" column="speed14" jdbcType="SMALLINT"/>
+            <result property="speed15" column="speed15" jdbcType="SMALLINT"/>
+            <result property="speed16" column="speed16" jdbcType="SMALLINT"/>
+            <result property="speed17" column="speed17" jdbcType="SMALLINT"/>
+            <result property="speed18" column="speed18" jdbcType="SMALLINT"/>
+            <result property="speed19" column="speed19" jdbcType="SMALLINT"/>
+            <result property="speed20" column="speed20" jdbcType="SMALLINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,devicelist_id,edge_compute_status0,
+        edge_compute_status1,edge_compute_status2,edge_compute_status3,
+        luminance,traffic_flow,dimming_ratio,
+        lighting_time,speed1,speed2,
+        speed3,speed4,speed5,
+        speed6,speed7,speed8,
+        speed9,speed10,speed11,
+        speed12,speed13,speed14,
+        speed15,speed16,speed17,
+        speed18,speed19,speed20,
+        upload_time
+    </sql>
+    <select id="getLightTime" resultType="java.util.Map">
+        <!-- ========== 原代码（已注释）========== -->
+        <!-- 原 SQL 在子查询中 SELECT 了 upload_time，但 GROUP BY 只有 lighting_time 和 DATE_FORMAT(upload_time, '%Y-%m-%d %H') -->
+        <!-- 这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+        <!-- SELECT
+        lighting_time,date(upload_time) upload_time
+        FROM
+        (
+        SELECT
+        lighting_time,
+        upload_time
+        FROM
+        tunnel_edge_compute_data
+        ...
+        GROUP BY
+        lighting_time,
+        DATE_FORMAT( upload_time, '%Y-%m-%d %H' )
+        ...
+        ) a -->
+        
+        <!-- ========== 新代码 ========== -->
+        <!-- 修复：子查询中使用 DATE_FORMAT 与 GROUP BY 保持一致 -->
+        <!-- 外层查询直接使用子查询返回的 upload_time（已经是格式化后的日期+小时），或使用 DATE_FORMAT 提取日期部分 -->
+        SELECT
+        lighting_time,
+        DATE_FORMAT(upload_time, '%Y-%m-%d') upload_time
+        FROM
+        (
+        SELECT
+        lighting_time,
+        DATE_FORMAT( upload_time, '%Y-%m-%d %H' ) upload_time
+        FROM
+        tunnel_edge_compute_data
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND upload_time &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND upload_time &lt;= concat(#{endTime},' 23:59:59')
+            </if>
+            <if test="time != null and time != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') = #{time}
+            </if>
+            and devicelist_id = #{deviceListId}
+        </where>
+        GROUP BY
+        lighting_time,
+        DATE_FORMAT( upload_time, '%Y-%m-%d %H' )
+        ORDER BY
+        lighting_time DESC
+        ) a
+    </select>
+    
+    <!-- Dashboard 用户当月亮灯时长：按 type=1 设备汇总 lighting_time，按月分组。lighting_time*0.1=小时 -->
+    <select id="selectMonthlyLightingTimeSum" resultType="com.scsdky.web.domain.vo.dashboard.MonthlyLightingVo">
+        SELECT CAST(MONTH(a.upload_time) AS UNSIGNED) AS `month`, SUM(a.lighting_time) AS totalLightingTime
+        FROM tunnel_edge_compute_data a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 1
+        WHERE tdi.tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND YEAR(a.upload_time) = #{year}
+        GROUP BY CAST(MONTH(a.upload_time) AS UNSIGNED)
+        ORDER BY `month`
+    </select>
+
+    <!-- 本月 1 号 00:00 ~ endTime 23:59 内，用户隧道亮灯时长总和（lighting_time×0.1=小时） -->
+    <select id="selectCurrentMonthLightingTimeSum" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(a.lighting_time), 0)
+        FROM tunnel_edge_compute_data a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 1
+        WHERE tdi.tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND a.upload_time &gt;= #{startTime}
+        AND a.upload_time &lt;= #{endTime}
+    </select>
+
+    <!-- 本月 1 号 ~ endTime 内，各隧道有亮灯数据的天数（按 DATE(upload_time) 去重） -->
+    <select id="selectCurrentMonthDataDaysByTunnel" resultType="com.scsdky.web.domain.vo.dashboard.TunnelLightingDaysVo">
+        SELECT tdi.tunnel_id AS tunnelId,
+               COUNT(DISTINCT DATE(a.upload_time)) AS daysInMonth
+        FROM tunnel_edge_compute_data a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 1
+        WHERE tdi.tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND a.upload_time &gt;= #{startTime}
+        AND a.upload_time &lt;= #{endTime}
+        GROUP BY tdi.tunnel_id
+    </select>
+
+    <!-- 批量查询边缘计算终端的最新记录（按id倒序，每个设备一条） -->
+    <!-- 只查询必要字段：id, devicelist_id, upload_time -->
+    <select id="selectLatestByDeviceIds" resultType="com.scsdky.web.domain.TunnelEdgeComputeData">
+        SELECT a.id, a.devicelist_id, a.upload_time
+        FROM tunnel_edge_compute_data a
+        INNER JOIN (
+            SELECT devicelist_id, MAX(id) as max_id
+            FROM tunnel_edge_compute_data
+            WHERE devicelist_id IN
+            <foreach collection="deviceIds" item="deviceId" open="(" separator="," close=")">
+                #{deviceId}
+            </foreach>
+            GROUP BY devicelist_id
+        ) b ON a.devicelist_id = b.devicelist_id AND a.id = b.max_id
+    </select>
+</mapper>

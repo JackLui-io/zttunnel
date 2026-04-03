@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelTriggerLampsDataMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelTriggerLampsData">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="uniqueId" column="unique_id" jdbcType="BIGINT"/>
+            <result property="lampsStatus" column="lamps_status" jdbcType="TINYINT"/>
+            <result property="lampsStatusBak" column="lamps_status_bak" jdbcType="TINYINT"/>
+            <result property="outVoltage1" column="out_voltage1" jdbcType="TINYINT"/>
+            <result property="outVoltage2" column="out_voltage2" jdbcType="TINYINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,unique_id,lamps_status,
+        lamps_status_bak,out_voltage1,out_voltage2,
+        upload_time
+    </sql>
+    <select id="selectLampsStatus" resultType="java.util.Map">
+        select a.id,a.upload_time,a.unique_id,a.lamps_status,a.message_send,a.communication_send from  tunnel_trigger_lamps_data a,
+        (select MAX(upload_time) upload_time ,unique_id
+        from tunnel_trigger_lamps_data
+        where unique_id in
+        <foreach collection="tunnelLampsEdgeComputings" item="tunnelLampsEdgeComputing" open="(" separator="," close=")">
+            #{tunnelLampsEdgeComputing.uniqueId}
+        </foreach>
+        GROUP BY unique_id
+        ORDER BY upload_time desc ) b
+        where a.upload_time = b.upload_time
+        and a.unique_id = b.unique_id
+    </select>
+    
+    <!-- 批量查询灯具终端的最新记录（按id倒序，每个设备一条） -->
+    <!-- 只查询必要字段：id, unique_id, upload_time -->
+    <select id="selectLatestByUniqueIds" resultType="com.scsdky.web.domain.TunnelTriggerLampsData">
+        SELECT a.id, a.unique_id, a.upload_time
+        FROM tunnel_trigger_lamps_data a
+        INNER JOIN (
+            SELECT unique_id, MAX(id) as max_id
+            FROM tunnel_trigger_lamps_data
+            WHERE unique_id IN
+            <foreach collection="uniqueIds" item="uniqueId" open="(" separator="," close=")">
+                #{uniqueId}
+            </foreach>
+            GROUP BY unique_id
+        ) b ON a.unique_id = b.unique_id AND a.id = b.max_id
+    </select>
+</mapper>

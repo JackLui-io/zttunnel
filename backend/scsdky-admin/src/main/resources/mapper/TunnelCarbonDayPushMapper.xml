@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelCarbonDayPushMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelCarbonDayPush">
+        <id property="id" column="id" />
+        <result property="powerValue" column="power_value" />
+        <result property="devicelistId" column="devicelist_id" />
+        <result property="addr" column="addr" />
+        <result property="year" column="year" />
+        <result property="month" column="month" />
+        <result property="day" column="day" />
+        <result property="uploadTime" column="upload_time" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,power_value,devicelist_id,addr,year,month,
+        day,upload_time
+    </sql>
+    <select id="getEnergyCarbonVo" resultType="com.scsdky.web.domain.vo.EnergyCarbonVo">
+        WITH daily_power AS (
+        SELECT
+        DATE(a.upload_time) AS upload_time,
+        SUM(a.power_value) AS cumulativePowerConsumption,
+        GROUP_CONCAT(b.loop_name,'-',a.power_value) AS powerDataValue
+        FROM tunnel_carbon_day_push a
+        LEFT JOIN tunnel_power_edge_computing b on a.devicelist_id = b.devicelist_id and a.addr = b.address
+        WHERE a.devicelist_id in
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        and a.addr in
+        <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+            #{addrId}
+        </foreach>
+        <if test="analyzeDto.startTime != null and analyzeDto.startTime != ''">
+            and a.upload_time &gt;= DATE_SUB(#{analyzeDto.startTime},INTERVAL 1 DAY)
+        </if>
+        <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+            and a.upload_time &lt;= #{analyzeDto.endTime}
+        </if>
+        GROUP BY upload_time
+        ORDER BY upload_time
+        ),
+        daily_power2 AS (
+        SELECT
+        upload_time,cumulativePowerConsumption,powerDataValue,
+        cumulativePowerConsumption - LAG(cumulativePowerConsumption, 1) OVER (ORDER BY upload_time) AS dailyPowerConsumption
+        FROM daily_power order by upload_time desc
+        )
+        SELECT * FROM daily_power2
+        where 1 = 1
+        <if test="analyzeDto.startTime != null and analyzeDto.startTime != ''">
+            and upload_time &gt;= #{analyzeDto.startTime}
+        </if>
+    </select>
+
+    <select id="getEnergyCarbonVo4" resultType="com.scsdky.web.domain.vo.AddrEnergyCarbonVo">
+        SELECT
+        a.devicelist_id,
+        a.addr,
+        a.upload_time,
+        a.power_value,
+        b.loop_name
+        FROM tunnel_carbon_day_push a
+        LEFT JOIN (
+            SELECT 
+                devicelist_id,
+                address,
+                loop_name,
+                ROW_NUMBER() OVER (PARTITION BY devicelist_id, address ORDER BY meter_index) AS rn
+            FROM tunnel_power_edge_computing
+            WHERE devicelist_id IN
+            <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+                #{devicelistId}
+            </foreach>
+            AND address IN
+            <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+                #{addrId}
+            </foreach>
+        ) b ON a.devicelist_id = b.devicelist_id AND a.addr = b.address AND b.rn = 1
+        WHERE a.devicelist_id IN
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        AND a.addr IN
+        <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+            #{addrId}
+        </foreach>
+        <if test="analyzeDto.startTime != null and analyzeDto.startTime != ''">
+            AND a.upload_time &gt;= DATE_SUB(#{analyzeDto.startTime},INTERVAL 1 DAY)
+        </if>
+        <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+            AND a.upload_time &lt;= #{analyzeDto.endTime}
+        </if>
+        ORDER BY upload_time
+    </select>
+
+    <select id="getLatestDataByAddrIds" resultType="com.scsdky.web.domain.vo.AddrEnergyCarbonVo">
+        <!-- ========== 原代码（已注释）==========
+        SELECT
+        a.devicelist_id,
+        a.addr,
+        a.power_value,
+        c.loop_name
+        FROM tunnel_carbon_day_push a
+        INNER JOIN (
+        SELECT
+        devicelist_id,
+        addr,
+        MAX(upload_time) AS latest_upload_time
+        FROM tunnel_carbon_day_push
+        WHERE devicelist_id IN
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        AND addr IN
+        <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+            #{addrId}
+        </foreach>
+        <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+            AND upload_time &lt;= #{analyzeDto.endTime}
+        </if>
+        GROUP BY devicelist_id,addr
+        ) b ON
+        a.addr = b.addr
+        AND a.upload_time = b.latest_upload_time
+        AND a.devicelist_id IN
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        LEFT JOIN tunnel_power_edge_computing c ON a.devicelist_id = c.devicelist_id AND a.addr = c.address
+        GROUP BY 	a.devicelist_id,a.addr
+        ==========
+        -->
+
+        <!-- ========== 新代码 ==========
+        修复：
+        1. 在关联条件中加入 a.devicelist_id = b.devicelist_id，确保唯一匹配。
+        2. 移除最外层 GROUP BY，并将过滤条件放回 WHERE 子句，避免 ONLY_FULL_GROUP_BY 报错。
+        3. 只返回最新一条记录，无需额外分组。 -->
+        SELECT
+        a.devicelist_id,
+        a.addr,
+        a.power_value,
+        c.loop_name
+        FROM tunnel_carbon_day_push a
+        INNER JOIN (
+        SELECT
+        devicelist_id,
+        addr,
+        MAX(upload_time) AS latest_upload_time
+        FROM tunnel_carbon_day_push
+        WHERE devicelist_id IN
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        AND addr IN
+        <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+            #{addrId}
+        </foreach>
+        <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+            AND upload_time &lt;= #{analyzeDto.endTime}
+        </if>
+        GROUP BY devicelist_id, addr
+        ) b ON a.devicelist_id = b.devicelist_id AND a.addr = b.addr AND a.upload_time = b.latest_upload_time
+        LEFT JOIN tunnel_power_edge_computing c ON a.devicelist_id = c.devicelist_id AND a.addr = c.address
+        WHERE a.devicelist_id IN
+        <foreach collection="devicelistIds" item="devicelistId" open="(" separator="," close=")">
+            #{devicelistId}
+        </foreach>
+        AND a.addr IN
+        <foreach collection="addrIds" item="addrId" open="(" separator="," close=")">
+            #{addrId}
+        </foreach>
+        <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+            AND a.upload_time &lt;= #{analyzeDto.endTime}
+        </if>
+        ORDER BY a.devicelist_id, a.addr
+    </select>
+
+    <!-- Dashboard 用户月度用电：按用户隧道去重 devicelist_id 后汇总，避免同一设备关联多隧道时重复累加 -->
+    <select id="selectUserPowerByMonth" resultType="com.scsdky.web.domain.PowerLightVo">
+        SELECT a.month AS `month`, SUM(a.power_value) AS totalLight
+        FROM tunnel_carbon_day_push a
+        WHERE a.devicelist_id IN (
+            SELECT DISTINCT tdi.devicelist_id
+            FROM tunnel_devicelist_tunnelinfo tdi
+            INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+            WHERE tdi.type = 2
+        )
+        AND a.year = #{year}
+        GROUP BY a.month
+        ORDER BY a.month
+    </select>
+
+    <!-- Dashboard admin 全量月度用电：按 type=2 去重 devicelist_id 后汇总，避免重复累加 -->
+    <select id="selectAllPowerByMonth" resultType="com.scsdky.web.domain.PowerLightVo">
+        SELECT a.month AS `month`, SUM(a.power_value) AS totalLight
+        FROM tunnel_carbon_day_push a
+        WHERE a.devicelist_id IN (
+            SELECT DISTINCT devicelist_id FROM tunnel_devicelist_tunnelinfo WHERE type = 2
+        )
+        AND a.year = #{year}
+        GROUP BY a.month
+        ORDER BY a.month
+    </select>
+
+    <!-- 各隧道在指定年份有电表数据的日期范围（仅返回有数据的隧道） -->
+    <select id="selectTunnelDataDaysRange" resultType="com.scsdky.web.domain.vo.dashboard.TunnelDataDaysVo">
+        SELECT tdi.tunnel_id AS tunnelId,
+               MIN(DATE(a.upload_time)) AS firstDate,
+               MAX(DATE(a.upload_time)) AS lastDate
+        FROM tunnel_carbon_day_push a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+        WHERE tdi.tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND a.year = #{year}
+        GROUP BY tdi.tunnel_id
+    </select>
+
+    <!-- Dashboard 今日用电：按 DATE(upload_time)=date 汇总，用户隧道过滤 -->
+    <select id="selectTodayPowerSumByUser" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(a.power_value), 0)
+        FROM tunnel_carbon_day_push a
+        WHERE a.devicelist_id IN (
+            SELECT DISTINCT tdi.devicelist_id
+            FROM tunnel_devicelist_tunnelinfo tdi
+            INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+            WHERE tdi.type = 2
+        )
+        AND DATE(a.upload_time) = #{date}
+    </select>
+
+    <!-- Dashboard 今日用电：按 DATE(upload_time)=date 汇总，admin 全量 -->
+    <select id="selectTodayPowerSumAll" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(a.power_value), 0)
+        FROM tunnel_carbon_day_push a
+        WHERE a.devicelist_id IN (
+            SELECT DISTINCT devicelist_id FROM tunnel_devicelist_tunnelinfo WHERE type = 2
+        )
+        AND DATE(a.upload_time) = #{date}
+    </select>
+
+    <!-- Dashboard 今日有数据的隧道 ID 列表（用户过滤，用于计算今日原设计） -->
+    <select id="selectTunnelIdsWithDataOnDateByUser" resultType="java.lang.Long">
+        SELECT DISTINCT tdi.tunnel_id
+        FROM tunnel_carbon_day_push a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+        INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        WHERE DATE(a.upload_time) = #{date}
+    </select>
+
+    <!-- Dashboard 今日有数据的隧道 ID 列表（admin 全量，用于计算今日原设计） -->
+    <select id="selectTunnelIdsWithDataOnDateAll" resultType="java.lang.Long">
+        SELECT DISTINCT tdi.tunnel_id
+        FROM tunnel_carbon_day_push a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+        WHERE DATE(a.upload_time) = #{date}
+    </select>
+
+    <!-- Dashboard 今日原设计耗电量（kWh）：terminal 匹配(tunnel_id 或 id)的 design_operating_power_total(kW) 之和 * 24 -->
+    <select id="selectTodayDesignPowerSumByUser" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(tec.design_operating_power_total) * 24, 0)
+        FROM tunnel_edge_computing_terminal tec
+        WHERE tec.design_operating_power_total > 0
+        AND (
+            tec.tunnel_id IN (
+                SELECT DISTINCT tdi.tunnel_id
+                FROM tunnel_carbon_day_push a
+                INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+                INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+                WHERE DATE(a.upload_time) = #{date}
+            )
+            OR tec.id IN (
+                SELECT DISTINCT tdi.tunnel_id
+                FROM tunnel_carbon_day_push a
+                INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+                INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+                WHERE DATE(a.upload_time) = #{date}
+            )
+        )
+    </select>
+
+    <select id="selectTodayDesignPowerSumAll" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(tec.design_operating_power_total) * 24, 0)
+        FROM tunnel_edge_computing_terminal tec
+        WHERE tec.design_operating_power_total > 0
+        AND (
+            tec.tunnel_id IN (
+                SELECT DISTINCT tdi.tunnel_id
+                FROM tunnel_carbon_day_push a
+                INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+                WHERE DATE(a.upload_time) = #{date}
+            )
+            OR tec.id IN (
+                SELECT DISTINCT tdi.tunnel_id
+                FROM tunnel_carbon_day_push a
+                INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+                WHERE DATE(a.upload_time) = #{date}
+            )
+        )
+    </select>
+
+    <!-- Dashboard 今日实际耗电量（kWh）：批量版，与 getEnergyCarbonVo 的 LAG 逻辑一致，power_value 存 kWh。
+         同一电表同日多条记录时取 MAX(power_value) 作为当日累计读数，再汇总。 -->
+    <select id="selectTodayPowerConsumptionBatch" resultType="java.math.BigDecimal">
+        WITH valid_pairs AS (
+            SELECT tpe.devicelist_id, tpe.address
+            FROM tunnel_power_edge_computing tpe
+            INNER JOIN tunnel_devicelist_tunnelinfo tdi ON tpe.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+            <if test="userId != null">
+            INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+            </if>
+        ),
+        meter_daily AS (
+            SELECT DATE(a.upload_time) AS upload_time, a.devicelist_id, a.addr,
+                   MAX(a.power_value) AS meter_cumulative
+            FROM tunnel_carbon_day_push a
+            INNER JOIN valid_pairs vp ON a.devicelist_id = vp.devicelist_id AND a.addr = vp.address
+            WHERE a.upload_time &gt;= DATE_SUB(#{date}, INTERVAL 1 DAY)
+              AND a.upload_time &lt;= #{date}
+            GROUP BY DATE(a.upload_time), a.devicelist_id, a.addr
+        ),
+        daily_power AS (
+            SELECT upload_time,
+                   SUM(meter_cumulative) AS cumulativePowerConsumption
+            FROM meter_daily
+            GROUP BY upload_time
+            ORDER BY upload_time
+        ),
+        daily_power2 AS (
+            SELECT upload_time, cumulativePowerConsumption,
+                   cumulativePowerConsumption - LAG(cumulativePowerConsumption, 1) OVER (ORDER BY upload_time) AS dailyPowerConsumption
+            FROM daily_power
+        )
+        SELECT COALESCE(dailyPowerConsumption, 0) FROM daily_power2 WHERE upload_time = #{date}
+    </select>
+
+    <!-- 隧道月度耗电量 Top5：按 tunnel_id + month 汇总，排序取前 5 -->
+    <select id="selectTunnelMonthlyConsumptionTop5" resultType="com.scsdky.web.domain.vo.dashboard.TunnelMonthlyConsumptionVo">
+        SELECT tdi.tunnel_id AS tunnelId,
+               COALESCE(tnr.tunnel_name, '未知') AS tunnelName,
+               CAST(a.month AS UNSIGNED) AS month,
+               SUM(a.power_value) AS consumptionKwh
+        FROM tunnel_carbon_day_push a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+        LEFT JOIN t_tunnel_name_result tnr ON tdi.tunnel_id = tnr.id
+        <if test="userId != null">
+        INNER JOIN t_user_tunnel u ON tdi.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        </if>
+        WHERE a.year = #{year}
+        GROUP BY tdi.tunnel_id, tnr.tunnel_name, a.month
+        ORDER BY consumptionKwh DESC
+        LIMIT 5
+    </select>
+
+    <!-- 各隧道各月有电表数据的天数（按 DATE(upload_time) 去重，同一隧道多电表同日只计 1 天） -->
+    <select id="selectTunnelDataDaysByMonth" resultType="com.scsdky.web.domain.vo.dashboard.TunnelDataDaysByMonthVo">
+        SELECT tdi.tunnel_id AS tunnelId,
+               CAST(a.month AS UNSIGNED) AS month,
+               COUNT(DISTINCT DATE(a.upload_time)) AS daysInMonth
+        FROM tunnel_carbon_day_push a
+        INNER JOIN tunnel_devicelist_tunnelinfo tdi ON a.devicelist_id = tdi.devicelist_id AND tdi.type = 2
+        WHERE tdi.tunnel_id IN
+        <foreach collection="tunnelIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND a.year = #{year}
+        GROUP BY tdi.tunnel_id, a.month
+        ORDER BY tdi.tunnel_id, a.month
+    </select>
+</mapper>

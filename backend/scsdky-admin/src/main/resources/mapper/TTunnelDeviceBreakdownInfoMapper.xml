@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TTunnelDeviceBreakdownInfoMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TTunnelDeviceBreakdownInfo">
+            <result property="deivceNum" column="deivce_num" jdbcType="VARCHAR"/>
+            <result property="breakdownNum" column="breakdown_num" jdbcType="VARCHAR"/>
+            <result property="breakdownInfo" column="breakdown_info" jdbcType="VARCHAR"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        deivce_num,breakdown_num,breakdown_info
+    </sql>
+</mapper>

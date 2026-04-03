@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelTrafficFlowDayMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelTrafficFlowDay">
+            <id property="id" column="id" />
+            <result property="maxSpeed" column="max_speed" />
+            <result property="minSpeed" column="min_speed" />
+            <result property="avgSpeed" column="avg_speed" />
+            <result property="trafficFlow" column="traffic_flow" />
+            <result property="maxTrafficFlow" column="max_traffic_flow" />
+            <result property="minTrafficFlow" column="min_traffic_flow" />
+            <result property="uploadTime" column="upload_time" />
+            <result property="devicelistId" column="devicelist_id" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,max_speed,min_speed,avg_speed,traffic_flow,max_traffic_flow,
+        min_traffic_flow,upload_time,devicelist_id
+    </sql>
+</mapper>

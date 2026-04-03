@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.quartz.mapper.ClosePatrolMapper">
+    <update id="updatePatrolState">
+		UPDATE app_patrol
+		SET is_off = 1 WHERE patrol_id = #{patrolId}
+    </update>
+    <select id="selectNeedClosePatrol" resultType="com.scsdky.quartz.domain.CLosePatrol">
+		SELECT * FROM
+		(
+			SELECT T1.*,T2.time_create FROM app_patrol T1
+			LEFT JOIN app_track T2 ON T1.patrol_id = T2.patrol_id
+			WHERE T1.is_off = 0
+			ORDER BY time_create
+		) T GROUP BY patrol_id
+	</select>
+</mapper>

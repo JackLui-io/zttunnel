@@ -1,0 +1,9 @@
+# 管理员配置示例文件
+# 将此文件复制为 admin-config.properties 并放置在jar包同级目录
+
+# 管理员邮箱（支持多个，用逗号分隔）
+admin.emails=admin@example.com,admin2@example.com
+
+# 管理员手机号（可选，支持多个，用逗号分隔）
+admin.phones=13800138000,13900139000
+

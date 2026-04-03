@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelPowerDataMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelPowerData">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="name" column="name" jdbcType="VARCHAR"/>
+            <result property="value" column="value" jdbcType="INTEGER"/>
+            <result property="devicelistId" column="devicelist_id" jdbcType="BIGINT"/>
+            <result property="uploadTime" column="upload_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,name,value,
+        devicelist_id,type,upload_time
+    </sql>
+    <select id="getPowerDataValue" resultType="com.scsdky.web.domain.vo.monitor.DnVo">
+        select sum(powerConsumption) powerConsumption,a.`hour` from (
+
+            SELECT date_format(a.upload_time, '%H' ) `hour`, ABS(a.`value` - b.`value`) AS powerConsumption,a.upload_time
+            FROM (
+                select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+                JOIN (
+                    select DATE_FORMAT(upload_time, '%Y-%m-%d %H') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                    where `name`='IMPEP'
+                    and upload_time &gt;= DATE_SUB(#{nowDate},INTERVAL 1 DAY)
+                    AND unique_id in
+                    <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                        #{ascUniqueId}
+                    </foreach>
+                    AND upload_time &lt;= CONCAT(#{nowDate},' 23:59:59')
+                    GROUP BY date_format(upload_time, '%Y-%m-%d %H' ),unique_id
+                    ORDER BY upload_time desc ) b
+                    ON DATE_FORMAT(a.upload_time, '%Y-%m-%d %H') = b.hour_group
+                    AND a.upload_time = b.upload_time
+                    and `name` = 'impep'
+                    and a.unique_id = b.unique_id
+                    AND a.unique_id in
+                    <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                        #{ascUniqueId}
+                    </foreach>
+                    order by a.upload_time desc
+            ) a
+            JOIN (
+                select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+                JOIN (
+                    select DATE_FORMAT(upload_time, '%Y-%m-%d %H') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                    where `name`='IMPEP'
+                    and upload_time &gt;= DATE_SUB(#{nowDate},INTERVAL 1 DAY)
+                    AND unique_id in
+                    <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                        #{ascUniqueId}
+                    </foreach>
+                    AND upload_time &lt;= CONCAT(#{nowDate},' 23:59:59')
+                    GROUP BY date_format(upload_time, '%Y-%m-%d %H' ),unique_id
+                    ORDER BY upload_time desc ) b
+                    ON DATE_FORMAT(a.upload_time, '%Y-%m-%d %H') = b.hour_group
+                    AND a.upload_time = b.upload_time
+                    and `name` = 'impep'
+                    and a.unique_id = b.unique_id
+                    AND a.unique_id in
+                    <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                        #{ascUniqueId}
+                    </foreach>
+                    order by a.upload_time desc
+            ) b
+            ON CONCAT(date_format(a.upload_time, '%Y-%m-%d %H' ),':00:00') = DATE_ADD(CONCAT(date_format(b.upload_time, '%Y-%m-%d %H' ),':00:00'), INTERVAL 1 HOUR)
+            and a.unique_id = b.unique_id
+            where DATE(a.upload_time) = #{nowDate}
+
+            <if test="descUniqueIds != null and descUniqueIds.size()>0">
+                union all
+                SELECT date_format(a.upload_time, '%H' ) `hour`, ABS(a.`value` - b.`value`) AS powerConsumption,a.upload_time
+                FROM (
+                    select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+                    JOIN (
+                    select DATE_FORMAT(upload_time, '%Y-%m-%d %H') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                    where `name`='IMPEP'
+                    and upload_time &gt;= DATE_SUB(#{nowDate},INTERVAL 1 DAY)
+                    AND unique_id in
+                    <foreach collection="descUniqueIds" item="descUniqueId" open="(" separator="," close=")">
+                        #{descUniqueId}
+                    </foreach>
+                    AND upload_time &lt;= CONCAT(#{nowDate},' 23:59:59')
+                    GROUP BY date_format(upload_time, '%Y-%m-%d %H' ),unique_id
+                    ORDER BY upload_time desc ) b
+                    ON DATE_FORMAT(a.upload_time, '%Y-%m-%d %H') = b.hour_group
+                    AND a.upload_time = b.upload_time
+                    and `name` = 'impep'
+                    and a.unique_id = b.unique_id
+                    AND a.unique_id in
+                    <foreach collection="descUniqueIds" item="descUniqueId" open="(" separator="," close=")">
+                        #{descUniqueId}
+                    </foreach>
+                    order by a.upload_time desc
+                ) a
+                JOIN (
+                    select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+                    JOIN (
+                    select DATE_FORMAT(upload_time, '%Y-%m-%d %H') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                    where `name`='IMPEP'
+                    and upload_time &gt;= DATE_SUB(#{nowDate},INTERVAL 1 DAY)
+                    AND unique_id in
+                    <foreach collection="descUniqueIds" item="descUniqueId" open="(" separator="," close=")">
+                        #{descUniqueId}
+                    </foreach>
+                    AND upload_time &lt;= CONCAT(#{nowDate},' 23:59:59')
+                    GROUP BY date_format(upload_time, '%Y-%m-%d %H' ),unique_id
+                    ORDER BY upload_time desc ) b
+                    ON DATE_FORMAT(a.upload_time, '%Y-%m-%d %H') = b.hour_group
+                    AND a.upload_time = b.upload_time
+                    and `name` = 'impep'
+                    and a.unique_id = b.unique_id
+                    AND a.unique_id in
+                    <foreach collection="descUniqueIds" item="descUniqueId" open="(" separator="," close=")">
+                        #{descUniqueId}
+                    </foreach>
+                    order by a.upload_time desc
+                ) b
+        <!--ON date_format(a.upload_time, '%H' ) = date_format(b.upload_time, '%H' ) + 1 -->
+                ON CONCAT(date_format(a.upload_time, '%Y-%m-%d %H' ),':00:00') = DATE_ADD(CONCAT(date_format(b.upload_time, '%Y-%m-%d %H' ),':00:00'), INTERVAL 1 HOUR)
+                and a.unique_id = b.unique_id
+                where DATE(a.upload_time) = #{nowDate}
+    </if>
+) a GROUP BY a.`hour` order by a.`hour`
+</select>
+<select id="selectCountValue" resultType="com.scsdky.web.domain.vo.EnergyCarbonVo">
+
+        select sum(powerConsumption) dailyPowerConsumption,
+               a.`day` uploadTime,a.devicelist_id,
+               SUM(a.`value`) cumulativePowerConsumption,
+               GROUP_CONCAT(CONCAT(b.loop_name,'-',a.`value`) ORDER BY b.meter_index) powerDataValue
+        from (
+            SELECT date_format(a.upload_time, '%Y-%m-%d' ) `day`,
+                   ABS(a.`value` - b.`value`) AS powerConsumption,a.upload_time,a.`value`,a.unique_id,a.devicelist_id
+            FROM (
+                select a.`name`,a.`value`,a.upload_time,a.unique_id,a.devicelist_id from tunnel_power_data a
+                JOIN (
+                select DATE_FORMAT(upload_time, '%Y-%m-%d') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                where `name`='IMPEP'
+                AND unique_id in
+                <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                    #{ascUniqueId}
+                </foreach>
+                <if test="analyzeDto.startTime != null and analyzeDto.startTime != ''">
+                    and upload_time &gt;= DATE_SUB(#{analyzeDto.startTime},INTERVAL 1 DAY)
+                </if>
+                <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+                    and upload_time &lt;= concat(#{analyzeDto.endTime},' 23:59:59')
+                </if>
+                GROUP BY date_format(upload_time, '%Y-%m-%d' ),unique_id
+                ORDER BY upload_time desc ) b
+                ON DATE_FORMAT(a.upload_time, '%Y-%m-%d') = b.hour_group
+                AND a.upload_time = b.upload_time
+                and `name` = 'impep'
+                and a.unique_id = b.unique_id
+                AND a.unique_id in
+                <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                    #{ascUniqueId}
+                </foreach>
+                order by a.upload_time desc
+            ) a
+            JOIN (
+                select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+                JOIN (
+                select DATE_FORMAT(upload_time, '%Y-%m-%d') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+                where `name`='IMPEP'
+                AND unique_id in
+                <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                    #{ascUniqueId}
+                </foreach>
+                <if test="analyzeDto.startTime != null and analyzeDto.startTime != ''">
+                    and upload_time &gt;= DATE_SUB(#{analyzeDto.startTime},INTERVAL 1 DAY)
+                </if>
+                <if test="analyzeDto.endTime != null and analyzeDto.endTime != ''">
+                    and upload_time &lt;= concat(#{analyzeDto.endTime},' 23:59:59')
+                </if>
+                GROUP BY date_format(upload_time, '%Y-%m-%d' ),unique_id
+                ORDER BY upload_time desc ) b
+                ON DATE_FORMAT(a.upload_time, '%Y-%m-%d') = b.hour_group
+                AND a.upload_time = b.upload_time
+                and `name` = 'impep'
+                and a.unique_id = b.unique_id
+                AND a.unique_id in
+                <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                    #{ascUniqueId}
+                </foreach>
+                order by a.upload_time desc
+            ) b
+            <!--ON date_format(a.upload_time, '%d' ) = date_format(b.upload_time, '%d' ) + 1-->
+            ON date_format(a.upload_time, '%Y-%m-%d' ) = DATE_ADD(date_format(b.upload_time, '%Y-%m-%d' ), INTERVAL 1 day)
+            and a.unique_id = b.unique_id
+        ) a
+        left JOIN tunnel_power_edge_computing b on a.unique_id = b.unique_id
+        GROUP BY a.`day`  ORDER BY a.`day` desc
+    </select>
+    <select id="selectImepGroupByMonth" resultType="com.scsdky.web.domain.PowerLightVo">
+
+        select sum(powerConsumption) totalLight,a.`month` from (
+
+        SELECT date_format(a.upload_time, '%m' ) `month`, ABS(a.`value` - b.`value`) AS powerConsumption,a.upload_time
+        FROM (
+            select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+            JOIN (
+            select DATE_FORMAT(upload_time, '%Y-%m') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+            where `name`='IMPEP'
+            and upload_time &gt;= CONCAT(DATE_SUB(concat(#{year},'-01-01'),INTERVAL 1 year),'-12-01')
+            AND unique_id in
+            <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                #{ascUniqueId}
+            </foreach>
+            AND upload_time &lt;= CONCAT(#{year},'-12-31')
+            GROUP BY date_format(upload_time, '%Y-%m' ),unique_id
+            ORDER BY upload_time desc ) b
+            ON DATE_FORMAT(a.upload_time, '%Y-%m') = b.hour_group
+            AND a.upload_time = b.upload_time
+            and `name` = 'impep'
+            and a.unique_id = b.unique_id
+            AND a.unique_id in
+            <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                #{ascUniqueId}
+            </foreach>
+            AND DATE_FORMAT(a.upload_time, '%Y') = #{year}
+            order by a.upload_time desc
+        ) a
+        JOIN (
+            select a.`name`,a.`value`,a.upload_time,a.unique_id from tunnel_power_data a
+            JOIN (
+            select DATE_FORMAT(upload_time, '%Y-%m') AS hour_group,MAX(upload_time) upload_time,unique_id from tunnel_power_data
+            where `name`='IMPEP'
+            and upload_time &gt;= CONCAT(DATE_SUB(concat(#{year},'-01-01'),INTERVAL 1 year),'-12-01')
+            AND unique_id in
+            <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                #{ascUniqueId}
+            </foreach>
+            AND upload_time &lt;= CONCAT(#{year},'-12-31')
+            GROUP BY date_format(upload_time, '%Y-%m' ),unique_id
+            ORDER BY upload_time desc ) b
+            ON DATE_FORMAT(a.upload_time, '%Y-%m') = b.hour_group
+            AND a.upload_time = b.upload_time
+            and `name` = 'impep'
+            and a.unique_id = b.unique_id
+            AND a.unique_id in
+            <foreach collection="ascUniqueIds" item="ascUniqueId" open="(" separator="," close=")">
+                #{ascUniqueId}
+            </foreach>
+            order by a.upload_time desc
+        ) b
+        <!-- ON date_format(a.upload_time, '%m' ) = date_format(b.upload_time, '%m' ) + 1 -->
+        ON CONCAT(date_format(a.upload_time, '%Y-%m'),'-01') = DATE_ADD(CONCAT(date_format(b.upload_time, '%Y-%m'),'-01'), INTERVAL 1 MONTH)
+        and a.unique_id = b.unique_id
+        ) a GROUP BY a.`month`
+
+    </select>
+
+    <!-- Dashboard 用户月度用电：一次 SQL，仅指定年份 1-12 月 -->
+    <select id="selectUserPowerByMonth" resultType="com.scsdky.web.domain.PowerLightVo">
+        SELECT SUM(powerConsumption) totalLight, CAST(a.`month` AS UNSIGNED) `month` FROM (
+            SELECT DATE_FORMAT(a.upload_time, '%m') `month`, ABS(a.`value` - b.`value`) AS powerConsumption
+            FROM (
+                SELECT a.`name`,a.`value`,a.upload_time,a.unique_id FROM tunnel_power_data a
+                JOIN (
+                    SELECT DATE_FORMAT(upload_time, '%Y-%m') AS hour_group, MAX(upload_time) upload_time, unique_id
+                    FROM tunnel_power_data
+                    WHERE `name`='IMPEP'
+                    AND upload_time &gt;= CONCAT(DATE_SUB(CONCAT(#{year},'-01-01'), INTERVAL 1 YEAR),'-12-01')
+                    AND upload_time &lt;= CONCAT(#{year},'-12-31 23:59:59')
+                    AND unique_id IN (
+                        SELECT DISTINCT tpe.unique_id
+                        FROM t_user_tunnel u
+                        JOIN tunnel_devicelist_tunnelinfo tdi ON u.tunnel_name_id = tdi.tunnel_id AND tdi.type = 2
+                        JOIN tunnel_power_edge_computing tpe ON tdi.devicelist_id = tpe.devicelist_id
+                        WHERE u.user_id = #{userId}
+                    )
+                    GROUP BY DATE_FORMAT(upload_time, '%Y-%m'), unique_id
+                ) b ON DATE_FORMAT(a.upload_time, '%Y-%m') = b.hour_group AND a.upload_time = b.upload_time
+                AND a.`name` = 'impep' AND a.unique_id = b.unique_id
+                AND a.unique_id IN (
+                    SELECT DISTINCT tpe.unique_id
+                    FROM t_user_tunnel u
+                    JOIN tunnel_devicelist_tunnelinfo tdi ON u.tunnel_name_id = tdi.tunnel_id AND tdi.type = 2
+                    JOIN tunnel_power_edge_computing tpe ON tdi.devicelist_id = tpe.devicelist_id
+                    WHERE u.user_id = #{userId}
+                )
+                AND DATE_FORMAT(a.upload_time, '%Y') = #{year}
+        ) a
+        JOIN (
+            SELECT a.`name`,a.`value`,a.upload_time,a.unique_id FROM tunnel_power_data a
+            JOIN (
+                SELECT DATE_FORMAT(upload_time, '%Y-%m') AS hour_group, MAX(upload_time) upload_time, unique_id
+                FROM tunnel_power_data
+                WHERE `name`='IMPEP'
+                AND upload_time &gt;= CONCAT(DATE_SUB(CONCAT(#{year},'-01-01'), INTERVAL 1 YEAR),'-12-01')
+                AND upload_time &lt;= CONCAT(#{year},'-12-31 23:59:59')
+                AND unique_id IN (
+                    SELECT DISTINCT tpe.unique_id
+                    FROM t_user_tunnel u
+                    JOIN tunnel_devicelist_tunnelinfo tdi ON u.tunnel_name_id = tdi.tunnel_id AND tdi.type = 2
+                    JOIN tunnel_power_edge_computing tpe ON tdi.devicelist_id = tpe.devicelist_id
+                    WHERE u.user_id = #{userId}
+                )
+                GROUP BY DATE_FORMAT(upload_time, '%Y-%m'), unique_id
+            ) b ON DATE_FORMAT(a.upload_time, '%Y-%m') = b.hour_group AND a.upload_time = b.upload_time
+            AND a.`name` = 'impep' AND a.unique_id = b.unique_id
+            AND a.unique_id IN (
+                SELECT DISTINCT tpe.unique_id
+                FROM t_user_tunnel u
+                JOIN tunnel_devicelist_tunnelinfo tdi ON u.tunnel_name_id = tdi.tunnel_id AND tdi.type = 2
+                JOIN tunnel_power_edge_computing tpe ON tdi.devicelist_id = tpe.devicelist_id
+                WHERE u.user_id = #{userId}
+            )
+        ) b ON CONCAT(DATE_FORMAT(a.upload_time, '%Y-%m'),'-01') = DATE_ADD(CONCAT(DATE_FORMAT(b.upload_time, '%Y-%m'),'-01'), INTERVAL 1 MONTH)
+        AND a.unique_id = b.unique_id
+        GROUP BY a.`month` ORDER BY a.`month`
+    </select>
+</mapper>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelSyscmdMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelSyscmd">
+            <id property="uniqueid" column="UniqueID" jdbcType="BIGINT"/>
+            <result property="userid" column="UserID" jdbcType="BIGINT"/>
+            <result property="cmd" column="Cmd" jdbcType="VARCHAR"/>
+            <result property="json" column="JSON" jdbcType="VARCHAR"/>
+            <result property="addtime" column="AddTime" jdbcType="TIMESTAMP"/>
+            <result property="rspstate" column="RspState" jdbcType="INTEGER"/>
+            <result property="target" column="Target" jdbcType="BIGINT"/>
+            <result property="rsptime" column="RspTime" jdbcType="TIMESTAMP"/>
+            <result property="isrsp" column="IsRsp" jdbcType="INTEGER"/>
+            <result property="readed" column="Readed" jdbcType="TINYINT"/>
+            <result property="rspdata" column="RspData" jdbcType="VARCHAR"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        UniqueID,UserID,Cmd,
+        JSON,AddTime,RspState,
+        Target,RspTime,IsRsp,
+        Readed,RspData
+    </sql>
+</mapper>

@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelStatisticsMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelStatistics">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="originalPowerConsumption" column="original_power_consumption" jdbcType="INTEGER"/>
+            <result property="originalUnitPowerConsumption" column="original_unit_power_consumption" jdbcType="INTEGER"/>
+            <result property="originalOperatingPower" column="original_operating_power" jdbcType="INTEGER"/>
+            <result property="originalLightUpTime" column="original_light_up_time" jdbcType="INTEGER"/>
+            <result property="originalCarbonEmission" column="original_carbon_emission" jdbcType="VARCHAR"/>
+            <result property="actualPowerConsumption" column="actual_power_consumption" jdbcType="INTEGER"/>
+            <result property="actualUnitPowerConsumption" column="actual_unit_power_consumption" jdbcType="INTEGER"/>
+            <result property="actualOperatingPower" column="actual_operating_power" jdbcType="INTEGER"/>
+            <result property="actualLightUpTime" column="actual_light_up_time" jdbcType="INTEGER"/>
+            <result property="actualcarbonemission" column="actualCarbonEmission" jdbcType="VARCHAR"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,original_power_consumption,original_unit_power_consumption,
+        original_operating_power,original_light_up_time,original_carbon_emission,
+        actual_power_consumption,actual_unit_power_consumption,actual_operating_power,
+        actual_light_up_time,actualCarbonEmission,tunnel_id,
+        create_time,update_time
+    </sql>
+    <select id="statistics" resultType="com.scsdky.web.domain.vo.statistics.StatisticsVo">
+        select sum(original_power_consumption) original_power_consumption,
+               sum(original_unit_power_consumption) original_unit_power_consumption,
+               sum(original_operating_power) original_operating_power,
+               sum(original_light_up_time) original_light_up_time,
+               sum(original_carbon_emission) original_carbon_emission,
+               sum(actual_power_consumption) actual_power_consumption,
+               sum(actual_unit_power_consumption) actual_unit_power_consumption,
+               sum(actual_operating_power) actual_operating_power,
+               sum(actual_light_up_time) actual_light_up_time,
+               sum(actualCarbonEmission) actualCarbonEmission
+        from t_tunnel_statistics
+        <where>
+            <if test="startTime != null and startTime != '' ">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &lt;= #{endTime}
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+    </select>
+    <select id="getCarbonByStatistics" resultType="com.scsdky.web.domain.vo.statistics.CarbonVo">
+        <!-- ========== 原代码（已注释）========== -->
+        <!-- 原 SQL 在 GROUP BY 中使用 date(upload_time)，但 SELECT 中直接使用了 upload_time -->
+        <!-- 这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+        <!-- select upload_time,
+               sum(actualCarbonEmission) actualCarbonEmission,
+               (sum(original_carbon_emission) - sum(actualCarbonEmission)) original_carbon_emission
+        from t_tunnel_statistics
+        ...
+        group by date(upload_time) order by upload_time desc -->
+        
+        <!-- ========== 新代码 ========== -->
+        <!-- 修复：使用 date(upload_time) 作为 SELECT 列，与 GROUP BY 保持一致 -->
+        select date(upload_time) upload_time,
+               sum(actualCarbonEmission) actualCarbonEmission,
+               (sum(original_carbon_emission) - sum(actualCarbonEmission)) original_carbon_emission
+        from t_tunnel_statistics
+        <where>
+            <if test="startTime != null and startTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND DATE_FORMAT(upload_time,'%Y-%m-%d') &lt;= #{endTime}
+            </if>
+            <if test="tunnelIds != null and tunnelIds.size()>0">
+                and tunnel_id in
+                <foreach collection="tunnelIds" item="tunnelId" open="(" separator="," close=")">
+                    #{tunnelId}
+                </foreach>
+            </if>
+        </where>
+        group by date(upload_time) order by date(upload_time) desc
+    </select>
+    <select id="dnByHouse" resultType="com.scsdky.web.domain.vo.monitor.DnVo">
+        SELECT HOUR(upload_time) as hour,
+        sum(actual_power_consumption) as powerConsumption
+        FROM t_tunnel_statistics
+        WHERE DATE(upload_time) = CURDATE() and tunnel_id = #{tunnelId}
+        GROUP BY HOUR(upload_time) ORDER BY Hour(upload_time);
+    </select>
+
+    <select id="lightByMonth" resultType="com.scsdky.web.domain.PowerLightVo">
+        select MONTH(upload_time) `month`,
+        (sum(original_power_consumption) - sum(actual_power_consumption)) totalEconomyLight,
+        sum(actual_power_consumption) totalLight
+        from t_tunnel_statistics
+        <where>
+            <if test="year != null and year != '' ">
+                AND DATE_FORMAT(upload_time,'%Y')=#{year}
+            </if>
+            <if test="tunnelIds != null and tunnelIds.size()>0">
+                and tunnel_id in
+                <foreach collection="tunnelIds" item="tunnelId" open="(" separator="," close=")">
+                    #{tunnelId}
+                </foreach>
+            </if>
+        </where>
+        GROUP BY MONTH(upload_time)
+    </select>
+
+    <!-- Dashboard 设备状态分布：统一查询，与设备管理页面一致
+         统计 5 类设备：边缘控制器、电能终端、洞外雷达、洞外亮度传感器、灯具终端
+         仅统计总数和在线数，离线数 = 总数 - 在线数，使用 COUNT(DISTINCT) 去重 -->
+    <select id="countDeviceStatusMultiTable" resultType="com.scsdky.web.domain.vo.DeviceTypeVo">
+        SELECT
+            COALESCE(SUM(cnt), 0) AS deviceCount,
+            COALESCE(SUM(online_cnt), 0) AS deviceOnline
+        FROM (
+            <!-- 1. 边缘控制器(type=1)、电能终端(type=2)：Online=1 表示在线 -->
+            SELECT COUNT(DISTINCT td.device_id) AS cnt,
+                   COUNT(DISTINCT CASE WHEN COALESCE(td.Online, 0) = 1 THEN td.device_id END) AS online_cnt
+            FROM tunnel_devicelist td
+            INNER JOIN tunnel_devicelist_tunnelinfo tdi ON td.device_id = tdi.devicelist_id AND tdi.type IN (1, 2)
+            WHERE td.device_type_id IN (1, 2)
+            <if test="tunnelIds != null and tunnelIds.size() > 0">
+                AND tdi.tunnel_id IN
+                <foreach collection="tunnelIds" item="tid" open="(" separator="," close=")">#{tid}</foreach>
+            </if>
+            <if test="tunnelIds == null or tunnelIds.size() == 0">
+                AND 1 = 0
+            </if>
+            UNION ALL
+            <!-- 2. 洞外雷达(type=1)、洞外亮度传感器(type=2)：device_status='00' 表示在线 -->
+            SELECT COUNT(DISTINCT tor.id) AS cnt,
+                   COUNT(DISTINCT CASE WHEN tor.device_status = '00' THEN tor.id END) AS online_cnt
+            FROM tunnel_out_of_radar tor
+            INNER JOIN tunnel_devicelist_tunnelinfo tdi ON tor.devicelist_id = tdi.devicelist_id AND tdi.type = 1
+            <where>
+                <if test="tunnelIds != null and tunnelIds.size() > 0">
+                    AND tdi.tunnel_id IN
+                    <foreach collection="tunnelIds" item="tid" open="(" separator="," close=")">#{tid}</foreach>
+                </if>
+                <if test="tunnelIds == null or tunnelIds.size() == 0">
+                    AND 1 = 0
+                </if>
+            </where>
+            UNION ALL
+            <!-- 3. 灯具终端：与 getDeviceLamp 一致，lamps_status bit0=0 通信正常、bit2=0 工作正常；NULL 或 bit 异常不计入在线 -->
+            SELECT COUNT(DISTINCT tlt.unique_id) AS cnt,
+                   COUNT(DISTINCT CASE WHEN tlt.lamps_status IS NOT NULL AND (tlt.lamps_status &amp; 1) = 0 AND (tlt.lamps_status &amp; 4) = 0 THEN tlt.unique_id END) AS online_cnt
+            FROM tunnel_lamps_terminal tlt
+            INNER JOIN tunnel_lamps_edge_computing tlec ON tlt.unique_id = tlec.unique_id
+            INNER JOIN tunnel_devicelist_tunnelinfo tdi ON tlec.devicelist_id = tdi.devicelist_id AND tdi.type = 1
+            <where>
+                <if test="tunnelIds != null and tunnelIds.size() > 0">
+                    AND tdi.tunnel_id IN
+                    <foreach collection="tunnelIds" item="tid" open="(" separator="," close=")">#{tid}</foreach>
+                </if>
+                <if test="tunnelIds == null or tunnelIds.size() == 0">
+                    AND 1 = 0
+                </if>
+            </where>
+        ) t
+    </select>
+
+    <!-- Dashboard 用户用电/节电月度数据：JOIN 用户隧道(level-4)，时间范围索引友好 -->
+    <select id="selectUserPowerMonthly" resultType="com.scsdky.web.domain.vo.dashboard.DashboardMonthlyRawVo">
+        SELECT MONTH(s.upload_time) AS month,
+               SUM(s.actual_power_consumption) AS totalLight,
+               SUM(s.original_power_consumption) - SUM(s.actual_power_consumption) AS totalEconomyLight,
+               SUM(s.original_carbon_emission) AS origCarbon,
+               SUM(s.actualCarbonEmission) AS actualCarbon
+        FROM t_tunnel_statistics s
+        INNER JOIN t_user_tunnel u ON s.tunnel_id = u.tunnel_name_id AND u.user_id = #{userId}
+        INNER JOIN t_tunnel_name_result t ON u.tunnel_name_id = t.id AND t.level = 4
+        WHERE s.upload_time &gt;= #{yearStart} AND s.upload_time &lt; #{yearEnd}
+        GROUP BY MONTH(s.upload_time)
+        ORDER BY month
+    </select>
+</mapper>

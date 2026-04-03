@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelDeviceAlarmMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelDeviceAlarm">
+        <id property="id" column="id" jdbcType="INTEGER"/>
+        <result property="typeId" column="type_id" jdbcType="INTEGER"/>
+        <result property="deviceId" column="device_id" jdbcType="BIGINT"/>
+        <result property="status" column="status" jdbcType="INTEGER"/>
+        <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- 查询指定日期范围内每个设备的最新告警记录 -->
+    <select id="selectLatestAlarmsByDateRange" resultMap="BaseResultMap">
+        SELECT a.id, a.type_id, a.device_id, a.status, a.update_time
+        FROM tunnel_check_alarm a
+        INNER JOIN (
+            SELECT type_id, device_id, MAX(id) as max_id
+            FROM tunnel_check_alarm
+            WHERE update_time >= #{startTime}
+              AND update_time &lt; #{endTime}
+            GROUP BY type_id, device_id
+        ) b ON a.type_id = b.type_id 
+           AND a.device_id = b.device_id 
+           AND a.id = b.max_id
+    </select>
+
+    <!-- 查询每个设备的最近N次健康检查记录（查询所有记录，在Java中分组处理） -->
+    <select id="selectRecentAlarmsByDevice" resultMap="BaseResultMap">
+        SELECT id, type_id, device_id, status, update_time
+        FROM tunnel_check_alarm
+        ORDER BY type_id, device_id, id DESC
+    </select>
+
+    <!-- 结果映射：设备告警统计DTO -->
+    <resultMap id="DeviceAlarmStatisticsResultMap" type="com.scsdky.web.domain.dto.DeviceAlarmStatisticsDto">
+        <result property="typeId" column="type_id" jdbcType="INTEGER"/>
+        <result property="deviceId" column="device_id" jdbcType="BIGINT"/>
+        <result property="count0" column="count_0" jdbcType="INTEGER"/>
+        <result property="count1" column="count_1" jdbcType="INTEGER"/>
+        <result property="count2" column="count_2" jdbcType="INTEGER"/>
+        <result property="latestStatus" column="latest_status" jdbcType="INTEGER"/>
+        <result property="recent3Count0" column="recent_3_count_0" jdbcType="INTEGER"/>
+        <result property="recent3Count2" column="recent_3_count_2" jdbcType="INTEGER"/>
+        <result property="consecutiveMissed" column="consecutive_missed" jdbcType="INTEGER"/>
+        <result property="latestUpdateTime" column="latest_update_time" jdbcType="TIMESTAMP"/>
+        <result property="totalCount" column="total_count" jdbcType="INTEGER"/>
+    </resultMap>
+
+    <!-- 使用SQL统计每个设备的健康检查指标（简化版本，减少嵌套子查询） -->
+    <select id="selectDeviceAlarmStatistics" resultMap="DeviceAlarmStatisticsResultMap">
+        SELECT 
+            t1.type_id,
+            t1.device_id,
+            -- 统计各状态次数
+            SUM(CASE WHEN t1.status = 0 THEN 1 ELSE 0 END) as count_0,
+            SUM(CASE WHEN t1.status = 1 THEN 1 ELSE 0 END) as count_1,
+            SUM(CASE WHEN t1.status = 2 THEN 1 ELSE 0 END) as count_2,
+            -- 最新状态（id最大的那条记录的状态）
+            MAX(CASE WHEN t1.id = max_ids.max_id THEN t1.status END) as latest_status,
+            -- 最近3次中status=0的次数（使用自连接计算序号）
+            SUM(CASE WHEN seq_nums.seq_num &lt;= 3 AND t1.status = 0 THEN 1 ELSE 0 END) as recent_3_count_0,
+            -- 最近3次中status=2的次数
+            SUM(CASE WHEN seq_nums.seq_num &lt;= 3 AND t1.status = 2 THEN 1 ELSE 0 END) as recent_3_count_2,
+            -- 连续未上报次数（在Java中计算，这里返回0作为占位符）
+            0 as consecutive_missed,
+            -- 最新记录的更新时间
+            MAX(CASE WHEN t1.id = max_ids.max_id THEN t1.update_time END) as latest_update_time,
+            -- 记录总数
+            COUNT(*) as total_count
+        FROM tunnel_check_alarm t1
+        -- 获取每个设备的最大id（用于判断最新记录）
+        INNER JOIN (
+            SELECT type_id, device_id, MAX(id) as max_id
+            FROM tunnel_check_alarm
+            GROUP BY type_id, device_id
+        ) max_ids ON t1.type_id = max_ids.type_id AND t1.device_id = max_ids.device_id
+        -- 计算每个设备每条记录的序号（用于判断最近3次）
+        -- 优化：只计算最近12条记录的序号
+        INNER JOIN (
+            SELECT 
+                t2.id,
+                COUNT(*) as seq_num
+            FROM tunnel_check_alarm t2
+            INNER JOIN tunnel_check_alarm t3 
+                ON t2.type_id = t3.type_id 
+                AND t2.device_id = t3.device_id 
+                AND t3.id >= t2.id
+            GROUP BY t2.id, t2.type_id, t2.device_id
+            HAVING COUNT(*) &lt;= #{limitCount}
+        ) seq_nums ON t1.id = seq_nums.id
+        GROUP BY t1.type_id, t1.device_id
+        HAVING COUNT(*) = #{limitCount}
+        ORDER BY t1.type_id, t1.device_id
+    </select>
+
+</mapper>
+

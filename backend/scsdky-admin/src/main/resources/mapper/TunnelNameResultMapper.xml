@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelNameResultMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelNameResult">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelName" column="tunnel_name" jdbcType="VARCHAR"/>
+            <result property="tunnelMileage" column="tunnel_mileage" jdbcType="DECIMAL"/>
+            <result property="parentId" column="parent_id" jdbcType="BIGINT"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+            <result property="status" column="status" jdbcType="BOOLEAN"/>
+            <result property="level" column="level" jdbcType="BOOLEAN"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_name,tunnel_mileage,
+        parent_id,create_time,
+        update_time,status,level
+    </sql>
+    <select id="getTunnelName" resultType="com.scsdky.web.domain.TunnelNameResult">
+        select
+        <include refid="Base_Column_List"/>
+        from t_tunnel_name_result a
+        where exists (select 1 from t_user_tunnel b where a.id = b.tunnel_name_id and b.user_id = #{userId})
+    </select>
+    <select id="getTunnelListByUserId" resultType="com.scsdky.web.domain.TunnelNameResult">
+        select a.* from  t_tunnel_name_result a
+        left join t_user_tunnel b
+        on a.id = b.tunnel_name_id
+        where a.level = 4 and b.user_id = #{userId}
+
+    </select>
+
+    <!-- 用户可见的 level-4 隧道 ID（含层级扩展：父节点分配则包含子节点） -->
+    <select id="selectLevel4TunnelIdsForUser" resultType="java.lang.Long">
+        SELECT t.id FROM t_tunnel_name_result t
+        WHERE t.level = 4
+        AND (
+            t.id IN (SELECT tunnel_name_id FROM t_user_tunnel WHERE user_id = #{userId})
+            OR t.parent_id IN (SELECT tunnel_name_id FROM t_user_tunnel WHERE user_id = #{userId})
+            OR t.parent_id IN (SELECT id FROM t_tunnel_name_result WHERE parent_id IN (SELECT tunnel_name_id FROM t_user_tunnel WHERE user_id = #{userId}))
+            OR t.parent_id IN (SELECT id FROM t_tunnel_name_result p WHERE p.parent_id IN (SELECT id FROM t_tunnel_name_result WHERE parent_id IN (SELECT tunnel_name_id FROM t_user_tunnel WHERE user_id = #{userId})))
+        )
+    </select>
+
+    <!-- 设备状态分布专用：仅直接分配 + level-3 扩展，不扩展 level-2（避免同名隧道导致多统计） -->
+    <select id="selectLevel4TunnelIdsForDeviceStatus" resultType="java.lang.Long">
+        SELECT t.id FROM t_tunnel_name_result t
+        WHERE t.level = 4
+        AND (
+            t.id IN (SELECT tunnel_name_id FROM t_user_tunnel WHERE user_id = #{userId})
+            OR t.parent_id IN (
+                SELECT ut.tunnel_name_id FROM t_user_tunnel ut
+                INNER JOIN t_tunnel_name_result tn ON ut.tunnel_name_id = tn.id
+                WHERE ut.user_id = #{userId} AND tn.level = 3
+            )
+        )
+    </select>
+</mapper>

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scsdky.web.mapper.TunnelDeviceMapper">
+
+    <resultMap id="BaseResultMap" type="com.scsdky.web.domain.TunnelDevice">
+            <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="tunnelName" column="tunnel_name" jdbcType="VARCHAR"/>
+            <result property="tunnelId" column="tunnel_id" jdbcType="BIGINT"/>
+            <result property="zone" column="zone" jdbcType="VARCHAR"/>
+            <result property="loopNumber" column="loop_number" jdbcType="VARCHAR"/>
+            <result property="deviceId" column="device_id" jdbcType="VARCHAR"/>
+            <result property="deviceType" column="device_type" jdbcType="VARCHAR"/>
+            <result property="deviceStatus" column="device_status" jdbcType="VARCHAR"/>
+            <result property="deviceNum" column="device_num" jdbcType="VARCHAR"/>
+            <result property="createTime" column="create_time" jdbcType="TIMESTAMP"/>
+            <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,tunnel_name,tunnel_id,
+        zone,loop_number,device_id,
+        device_type,device_status,device_num,
+        create_time,update_time
+    </sql>
+    <select id="getDeviceListByPage" resultType="com.scsdky.web.domain.TunnelDevice">
+        select <include refid="Base_Column_List" /> from t_tunnel_device
+        <where>
+            <if test="keyword != null and keyword != ''">
+                (loop_number like concat('%',#{keyword},'%') or device_num like concat('%',#{keyword},'%') or device_status like concat('%',#{keyword},'%'))
+            </if>
+            <if test="zone != null and zone != ''">
+                AND zone like concat('%',#{zone},'%')
+            </if>
+            <if test="deviceType != null and deviceType != ''">
+                AND device_type=#{deviceType}
+            </if>
+            <if test="deviceStatus != null and deviceStatus != ''">
+                AND device_status=#{deviceStatus}
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+
+    </select>
+    <select id="countByTunnelId" resultType="com.scsdky.web.domain.vo.DeviceTypeVo">
+        select count(*) deviceCount,
+               count(case when device_status = '在线' then id else null end) as 'deviceOnline',
+               count(case when device_status = '离线' then id else null end) as 'deviceOffline',
+               count(case when device_status = '故障' then id else null end) as 'deviceBreakdown'
+        from t_tunnel_device where tunnel_id = #{tunnelId}
+
+
+    </select>
+    <select id="getDeviceGroupByTypeAndStatus" resultType="com.scsdky.web.domain.vo.DeviceTypeAndStatusVo">
+        <!-- ========== 原代码（已注释）========== -->
+        <!-- 原 SQL 在 GROUP BY 中只按 device_type 分组，但 SELECT 中还有 device_status -->
+        <!-- 这在 MySQL 5.7+ 的 ONLY_FULL_GROUP_BY 模式下会报错 -->
+        <!-- select count(*) num,device_type,device_status,
+               count(case when device_status = '在线' then id else null end) as 'deviceOnline',
+               count(case when device_status = '离线' then id else null end) as 'deviceOffline',
+               count(case when device_status = '故障' then id else null end) as 'deviceBreakdown'
+        from t_tunnel_device
+        ...
+        GROUP BY device_type -->
+        
+        <!-- ========== 新代码 ========== -->
+        <!-- 修复：将 device_status 添加到 GROUP BY 中，或者使用聚合函数 -->
+        <!-- 根据业务逻辑，按设备类型和状态分组更合理 -->
+        select count(*) num,device_type,device_status,
+               count(case when device_status = '在线' then id else null end) as 'deviceOnline',
+               count(case when device_status = '离线' then id else null end) as 'deviceOffline',
+               count(case when device_status = '故障' then id else null end) as 'deviceBreakdown'
+        from t_tunnel_device
+        <where>
+            <if test="startTime != null and startTime != '' ">
+                AND DATE_FORMAT(create_time,'%Y-%m-%d') &gt;= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND DATE_FORMAT(create_time,'%Y-%m-%d') &lt;= #{endTime}
+            </if>
+            and tunnel_id = #{tunnelId}
+        </where>
+        GROUP BY device_type, device_status
+    </select>
+
+    <!-- Dashboard 设备状态分布：按隧道ID列表汇总 -->
+    <select id="countByTunnelIds" resultType="com.scsdky.web.domain.vo.DeviceTypeVo">
+        SELECT
+            COUNT(*) AS deviceCount,
+            COUNT(CASE WHEN device_status = '在线' THEN 1 END) AS deviceOnline,
+            COUNT(CASE WHEN device_status = '离线' THEN 1 END) AS deviceOffline,
+            COUNT(CASE WHEN device_status = '故障' THEN 1 END) AS deviceBreakdown
+        FROM t_tunnel_device
+        <where>
+            <if test="tunnelIds != null and tunnelIds.size() > 0">
+                tunnel_id IN
+                <foreach collection="tunnelIds" item="tunnelId" open="(" separator="," close=")">
+                    #{tunnelId}
+                </foreach>
+            </if>
+            <if test="tunnelIds == null or tunnelIds.size() == 0">
+                AND 1 = 0
+            </if>
+        </where>
+    </select>
+</mapper>
