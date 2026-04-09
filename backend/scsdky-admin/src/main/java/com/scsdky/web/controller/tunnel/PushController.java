@@ -12,12 +12,15 @@ import com.scsdky.web.utils.DateUtils;
 import io.swagger.annotations.Api;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 import java.io.IOException;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -66,10 +69,6 @@ public class PushController extends BaseController {
     @Resource
     private RedisCache redisCache;
 
-    /**
-     * 记录id 如果相等就不推送，说明已经推送过了
-     */
-    long id = 0;
     @Scheduled(cron = "0 0/5 * * * ? ")
     public AjaxResult push() throws IOException {
 
@@ -78,13 +77,14 @@ public class PushController extends BaseController {
 
         for (TunnelDevicelist devicelist : devicelists) {
             //模拟每20秒推送一个数据
-            AjaxResult ajaxResult = new AjaxResult();
             LambdaQueryWrapper<TunnelEdgeComputeData> tunnelEdgeComputeDataLambdaQueryWrapper = new LambdaQueryWrapper<>();
             tunnelEdgeComputeDataLambdaQueryWrapper.eq(TunnelEdgeComputeData::getDevicelistId,devicelist.getDeviceId());
             tunnelEdgeComputeDataLambdaQueryWrapper.orderByDesc(TunnelEdgeComputeData::getUploadTime);
             tunnelEdgeComputeDataLambdaQueryWrapper.last("limit 1");
             TunnelEdgeComputeData tunnelEdgeComputeData = tunnelEdgeComputeDataService.getOne(tunnelEdgeComputeDataLambdaQueryWrapper);
-            if(tunnelEdgeComputeData != null && id != tunnelEdgeComputeData.getId()) {
+            // 原先用全局 long id 与 edge 表主键比较，去重「同一条记录只推一次」；若现场长时间没有新行，
+            // 定时任务再也不会推送，大屏 WS Messages 会一直空白。现改为每 5 分钟按当前最新一行推送一次。
+            if (tunnelEdgeComputeData != null) {
                 // ========== 原代码（已注释）==========
                 // 原代码直接使用 tunnelDevicelistTunnelinfo，但如果查询结果为空（返回null）会导致 NullPointerException
                 // TunnelDevicelistTunnelinfo tunnelDevicelistTunnelinfo = tunnelDevicelistTunnelinfoService.getOne(new LambdaQueryWrapper<TunnelDevicelistTunnelinfo>()
@@ -102,17 +102,38 @@ public class PushController extends BaseController {
                         .eq(TunnelDevicelistTunnelinfo::getDevicelistId, tunnelEdgeComputeData.getDevicelistId())
                         .eq(TunnelDevicelistTunnelinfo::getType, 1));
                 if (tunnelDevicelistTunnelinfo != null) {
-                    ajaxResult.put("tunnelId", tunnelDevicelistTunnelinfo.getTunnelId());
                     TunnelEdgeComputingTerminal tunnelEdgeComputingTerminal = tunnelEdgeComputingTerminalService.getById(tunnelDevicelistTunnelinfo.getTunnelId());
                     if (tunnelEdgeComputingTerminal != null) {
-                        ajaxResult.put("flag", tunnelEdgeComputeData.getTrafficFlow() * tunnelEdgeComputingTerminal.getUmax());
-                        WebSocketServer.sendInfo(ajaxResult, String.valueOf(3));
-                        id = tunnelEdgeComputeData.getId();
+                        // WebSocket 编码器为 HashMapEncoder，且 AjaxResult 基类 put 不写入字段；
+                        // 必须用 HashMap 否则前端收不到 tunnelId/flag，随车动画无法触发。
+                        int flow = tunnelEdgeComputeData.getTrafficFlow() != null ? tunnelEdgeComputeData.getTrafficFlow() : 0;
+                        int umax = tunnelEdgeComputingTerminal.getUmax() != null ? tunnelEdgeComputingTerminal.getUmax() : 1;
+                        HashMap<String, Object> wsPayload = new HashMap<>(4);
+                        wsPayload.put("tunnelId", tunnelDevicelistTunnelinfo.getTunnelId());
+                        wsPayload.put("flag", flow * (long) umax);
+                        WebSocketServer.sendInfo(wsPayload, String.valueOf(3));
                     }
                 }
             }
         }
         return AjaxResult.success();
+    }
+
+    /**
+     * 联调：手动向 sid=3 推送一车流帧，不依赖定时任务与边缘库是否有新行。
+     */
+    @GetMapping("/test/traffic-ws")
+    public AjaxResult testTrafficWebSocket(
+            @RequestParam Long tunnelId,
+            @RequestParam(defaultValue = "800") int flag) throws IOException {
+        if (flag <= 0) {
+            return AjaxResult.error("flag 须大于 0");
+        }
+        HashMap<String, Object> wsPayload = new HashMap<>(4);
+        wsPayload.put("tunnelId", tunnelId);
+        wsPayload.put("flag", flag);
+        WebSocketServer.sendInfo(wsPayload, "3");
+        return AjaxResult.success(wsPayload);
     }
 
     //@Scheduled(cron = "0 0/5 * * * ? ")

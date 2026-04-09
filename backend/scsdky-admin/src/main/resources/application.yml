@@ -137,13 +137,6 @@ springfox:
     swagger:
       use-model-v3: false
 
-# 定时任务配置（写数据库的任务，多实例部署时仅在正式环境开启，默认关闭）
-scheduler:
-  sync-traffic-flow-day: false      # 同步车流/车速到 tunnel_traffic_flow_day，每天 0:30
-  sync-inside-outside-day: false   # 同步洞内外亮度到 tunnel_inside_outside_day，每天 0:20
-  sync-carbon-day: false           # 同步能碳数据到 tunnel_carbon_day，每天 0:10
-  check-power-data: false          # 检查电表数据并补录到 tunnel_power_data，每天 0:40
-
 # 防止XSS攻击
 xss:
   # 过滤开关

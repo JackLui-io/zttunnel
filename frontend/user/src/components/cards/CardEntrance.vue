@@ -31,19 +31,12 @@
           <!-- WebSocket 车流：多车按 0–1 比例与灯具共用同一坐标轴 -->
           <img
             v-for="c in cars"
-            v-show="carVisible && cars.length > 0"
+            v-show="cars.length > 0"
             :key="c.key"
             src="/page1/car.png"
             alt=""
             class="entrance-tunnel-car entrance-tunnel-car--moving"
             :style="carMovingStyle(c.x)"
-          />
-          <!-- 非智慧调光且无模拟车时：保留原装饰位 -->
-          <img
-            v-show="carVisible && cars.length === 0"
-            src="/page1/car.png"
-            alt=""
-            class="entrance-tunnel-car entrance-tunnel-car--static"
           />
         </div>
       </div>
@@ -65,26 +58,31 @@ import { useTunnelWebSocket } from '@/composables/useTunnelWebSocket'
 const props = defineProps<{ tunnelId?: number; parentTunnelId?: number }>()
 
 const tunnelIdRef = computed(() => props.tunnelId ?? null)
-const { cars, running } = useTunnelWebSocket(tunnelIdRef)
+const parentTunnelIdRef = computed(() => props.parentTunnelId ?? null)
+const { cars, running } = useTunnelWebSocket(tunnelIdRef, parentTunnelIdRef)
 
 /** 照明模式：0=无极调光 1=智慧调光 2=固定功率。来自 getCurrentModel.mode */
 const lampMode = ref<number | undefined>(undefined)
 
-/** 某灯是否亮：mode != 1 时全亮；mode == 1 时按段亮灯（车在灯段内才亮） */
+/**
+ * 灯态（与小车数据源一致）：
+ * - 小车 **仅由** WebSocket 车流推送产生；无车时无动画车。
+ * - 无车：mode != 1 常量全亮；mode == 1 全暗。
+ * - 有车：按段随车亮（车在相邻灯比例的中点区间内则该灯亮）。
+ */
 function isLampOn(ratio: number, index: number) {
-  if (lampMode.value != null && lampMode.value !== 1) return true
   const positions = lampPositions.value
   const prev: number = index > 0 ? (positions[index - 1] ?? 0) : 0
   const next: number = index < positions.length - 1 ? (positions[index + 1] ?? 1) : 1
   const left = (prev + ratio) / 2
   const right = (ratio + next) / 2
-  return running.value.some((x) => x >= left && x <= right)
+  const carInSegment = running.value.some((x) => x >= left && x <= right)
+  if (running.value.length > 0) {
+    return carInSegment
+  }
+  if (lampMode.value != null && lampMode.value !== 1) return true
+  return false
 }
-
-/** 有灯亮时显示小车：mode != 1 全亮，或 mode == 1 时有车在隧道内 */
-const carVisible = computed(
-  () => (lampMode.value != null && lampMode.value !== 1) || cars.value.length > 0
-)
 
 /** 与 useTunnelWebSocket 中 running 一致：沿洞轴 0–1，与灯具 left 百分比对齐 */
 function carMovingStyle(x: number) {
@@ -404,9 +402,6 @@ onBeforeUnmount(() => {
   object-position: bottom;
   z-index: 4;
   pointer-events: none;
-}
-.entrance-tunnel-car--static {
-  left: 24%;
 }
 .entrance-tunnel-car--moving {
   transition: left 0.1s linear;

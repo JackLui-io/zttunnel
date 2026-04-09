@@ -1,7 +1,6 @@
 package com.scsdky.web.config.websocket;
 
 
-import com.scsdky.common.core.domain.AjaxResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -10,6 +9,7 @@ import javax.websocket.*;
 import javax.websocket.server.PathParam;
 import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 
@@ -50,7 +50,11 @@ public class WebSocketServer {
         logger.info("有新隧道开始监听:识别码为"+sid+",当前在线人数为" + getOnlineCount());
         this.sid=sid;
         try {
-            sendMessage(AjaxResult.success());
+            // 端点仅注册 HashMapEncoder，sendObject(AjaxResult) 无法编码，会导致首包失败、客户端 Messages 长期为空
+            HashMap<String, Object> welcome = new HashMap<>(4);
+            welcome.put("code", 200);
+            welcome.put("msg", "connected");
+            sendMessage(welcome);
         } catch (IOException | EncodeException e) {
             logger.error("websocket IO异常");
         }

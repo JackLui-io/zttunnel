@@ -5,7 +5,7 @@
       <DataScreenFooter />
       <main class="screen-main">
         <DataScreenLeft :screen-data="screenData" :loading="loading" />
-        <DataScreenCenter :screen-data="screenData" :loading="loading" />
+        <DataScreenCenter :screen-data="screenData" :loading="loading" :tunnel-tree="tunnelTree" />
         <DataScreenRight :screen-data="screenData" :loading="loading" />
       </main>
     </div>
@@ -28,8 +28,10 @@ import {
   getTodayPowerSummary,
   getLightUpReductionRate,
 } from '@/api/analyze'
+import { getTunnelTree, type TunnelNode } from '@/api/tunnel'
 
 const loading = ref(true)
+const tunnelTree = ref<TunnelNode[] | null>(null)
 const tunnelOverview = ref<{ tunnelCount?: number; totalMileage?: number } | null>(null)
 const pendingCounts = ref<{ deviceAlarm?: number; realtimeAlarm?: number } | null>(null)
 const todayPower = ref<{ todayConsumptionKwh?: number; todaySavingKwh?: number; todayCarbonReductionKg?: number } | null>(null)
@@ -196,6 +198,7 @@ function fetchData() {
   const p5 = getDeviceStatusDistribution()
   const p6 = getTodayPowerSummary()
   const p7 = getLightUpReductionRate()
+  const p8 = getTunnelTree()
 
   p1.then((v) => { tunnelOverview.value = v ?? null }).catch(() => { tunnelOverview.value = null })
   p2.then((v) => { pendingCounts.value = v ?? null }).catch(() => { pendingCounts.value = null })
@@ -204,8 +207,9 @@ function fetchData() {
   p5.then((v) => { deviceStatus.value = v ?? null }).catch(() => { deviceStatus.value = null })
   p6.then((v) => { todayPower.value = v ?? null }).catch(() => { todayPower.value = null })
   p7.then((v) => { lightUpReduction.value = v ?? null }).catch(() => { lightUpReduction.value = null })
+  p8.then((v) => { tunnelTree.value = v }).catch(() => { tunnelTree.value = null })
 
-  Promise.allSettled([p1, p2, p3, p4, p5, p6, p7]).finally(() => {
+  Promise.allSettled([p1, p2, p3, p4, p5, p6, p7, p8]).finally(() => {
     loading.value = false
   })
 }
@@ -236,8 +240,8 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #edf2ea url('/dataScreen/images/map.png') no-repeat 45% -15%;
-  background-size: auto 110%;
+  /* 全国地图移至 DataScreenCenter 热点层，避免与点击区域错位 */
+  background: #edf2ea;
   margin: 0;
 }
 
@@ -256,6 +260,12 @@ onBeforeUnmount(() => {
 
 .screen-main > * {
   min-width: 0;
+}
+
+/* 中间栏（含地图信息框）盖在左右栏之上，避免侧栏压住弹层 */
+.screen-main > .screen-center {
+  position: relative;
+  z-index: 20;
 }
 
 /* 大屏：限制侧栏最大宽度，避免过度拉伸 */
