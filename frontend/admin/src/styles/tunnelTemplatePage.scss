@@ -1,0 +1,165 @@
+// 模板详情 / 模板编辑共用布局与「边缘终端参数」四列表格
+
+.tunnel-template-page {
+  .page-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .page-toolbar__title {
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .page-toolbar__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .tunnel-banner-alert {
+    margin-bottom: 10px;
+
+    .el-alert__title {
+      white-space: normal;
+      line-height: 1.45;
+    }
+  }
+
+  .page-sub {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+    line-height: 1.5;
+  }
+
+  .head-desc {
+    margin-bottom: 16px;
+  }
+
+  .directions-title {
+    margin: 8px 0 8px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .dir-summary-table {
+    margin-bottom: 16px;
+  }
+
+  .direction-tabs-wrap {
+    margin-top: 4px;
+  }
+
+  .direction-inner {
+    padding: 4px 2px 12px;
+    min-width: 0;
+  }
+
+  .template-section-card {
+    margin-bottom: 16px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 8px;
+    background: var(--el-bg-color);
+
+    &.el-card {
+      --el-card-border-color: transparent;
+    }
+
+    .el-card__header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--el-border-color-lighter);
+    }
+
+    .el-card__body {
+      padding: 16px;
+    }
+  }
+
+  .template-section-card__title {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .read-only-alert {
+    margin-bottom: 16px;
+  }
+
+  .head-form {
+    max-width: 100%;
+  }
+
+  .direction-payload-wrap {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--el-border-color-lighter);
+  }
+
+  .direction-save-footer {
+    margin-top: 16px;
+  }
+}
+
+.edge-terminal-param-grid-wrapper {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 12px 14px;
+  background: var(--el-fill-color-blank);
+  max-height: min(72vh, 720px);
+  overflow-y: auto;
+}
+
+.edge-terminal-param-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+
+@media (max-width: 1400px) {
+  .edge-terminal-param-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .edge-terminal-param-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .edge-terminal-param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.edge-terminal-param-cell {
+  min-width: 0;
+}
+
+.edge-terminal-param-cell--full {
+  grid-column: 1 / -1;
+}
+
+.edge-terminal-param-cell__label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.edge-terminal-param-cell__value {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  line-height: 1.45;
+  word-break: break-word;
+}

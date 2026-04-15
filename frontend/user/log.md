@@ -487,3 +487,137 @@ form = {
 - 小车图层移入 `entrance-tunnel-inner`，与灯具共用 0–100% 洞轴坐标
 - `useTunnelWebSocket` 返回的 `cars[].x` 绑定为 `left: x * 100%` + `translateX(-50%)`，多车 `v-for`，`transition: left 0.1s linear` 与 100ms  tick 对齐
 - 非智慧调光且无模拟车时仍显示原 `left: 24%` 装饰车
+
+### 修复入口里程随车亮灯不生效（2026-04-01）
+
+**原因概要**：
+- WebSocket URL 仅用 `hostname` 丢掉 API 端口（如 `:8026`），难以连上真后端
+- 开发环境 Vite 未代理 `/websocket`，`ws://localhost:5173/websocket/3` 无法到达 8026
+- `tunnelId ===` 严格相等易因 number/string 不匹配丢消息
+- `setInterval` 缺少第二参数时行为不确定；已固定为 100ms
+- `mode !== 1` 时 `isLampOn` 恒为 true，有车流时灯仍全亮、看不出随车效果
+
+**修改**：
+- `useTunnelWebSocket.ts`：`getWebSocketUrl` 使用 `URL.host`（含端口）；无完整 base 时用 `window.location.host`；消息用 `coerceTrafficPayload` 解析，`Number(tunnelId)` 比对；`setInterval(..., 100)`
+- `vite.config.ts`：增加 `/websocket` 的 `ws: true` 代理到 `localhost:8026`
+- `CardEntrance.vue`：有 `running` 车时一律按段亮灯；无车且非智慧调光仍全亮；无车且智慧调光仍全暗
+
+### 车流 WS 与选中隧道 id 对齐（2026-04-01）
+
+**后端**：`PushController` 车流推送改为 `HashMap`，确保 JSON 含 `tunnelId`、`flag`（见 `zt_project_tunnel` log）。
+
+**前端**：`useTunnelWebSocket` 增加可选 `parentTunnelId` 参数，与当前选中 level-4 或 level-3 匹配均可；开发环境下 tunnelId 不匹配时在控制台 `console.debug` 提示。
+
+### 开发环境车流 WebSocket 直连后端端口（2026-04-01）
+
+**问题**：`.env.development` 中 `VITE_API_BASE_URL` 为空时，原逻辑使用 `ws://{页面 host}/websocket/3`（如 `5173`），连到 Vite 而非 Java；Network → WS → Messages 中只有 `type:connected`、vite-plugin-inspect 等 HMR 流量，无 `tunnelId`。
+
+**修改**：`getWebSocketUrl` 在 `import.meta.env.DEV` 且无绝对 API 地址时，改为 `ws(s)://{hostname}:{VITE_DEV_BACKEND_PORT||8026}/websocket/3`；支持可选 `VITE_WS_URL` 覆盖。`.env.development` 增加说明注释。
+
+### 入口里程卡片车流逻辑（2026-04-07）
+
+- 去掉静态装饰车、切换隧道即 `stopRun`、`carsPush` 单帧上限放宽等已保留。
+- **不再**在点开隧道时根据 `clByHouse` 小时流量自动 seed 小车：统计是「小时里的车」，不是「此刻是否过车」，一点隧道就动易与现场不符。**入口小车与随车亮灯仅由 WebSocket（tunnelId + flag）驱动**；「车流量统计」图表仍用 clByHouse，与动画解耦。说明见 `useTunnelWebSocket.ts` 顶部注释与 `CardEntrance` 中 `isLampOn` 注释。
+
+### 生产环境 WS 空白与相对路径 API（2026-03-31）
+
+**原因说明**：`VITE_API_BASE_URL=/api` 为相对路径时，显式走 `wss://{页面 host}/websocket/3`，须在网关反代 `/websocket/` 并 Upgrade；前后端不同域时用 `VITE_WS_URL`。`VITE_TUNNEL_WS_DEBUG=1` 时在控制台输出 WS open/message 及 tunnelId 不匹配提示（生产可临时写入 `.env.production` 再构建）。
+
+**修改**：`getWebSocketUrl` 增加以 `/` 开头的 `base` 分支与注释；`useTunnelWebSocket` 增加 `isTunnelWsDebug` 及对 `onopen`/`onerror`/`onclose` 日志。`.env.production` 增加 `VITE_WS_URL`、`VITE_TUNNEL_WS_DEBUG` 说明。
+
+### HTTPS 站点与 wss（2026-03-31）
+
+**行为**：`getWebSocketUrl` 已用 `window.location.protocol === 'https:'` 选择 `wss:`，同源默认地址为 `wss://{host}/websocket/3`。
+
+**防呆**：若 `VITE_WS_URL` 误写为 `ws://`，在 HTTPS 页面下自动改为 `wss://`，避免混合内容被拦。`.env.production` 注释强调生产应用 `wss://`。
+
+### 生产 Nginx 完整示例（2026-03-31）
+
+**新增**：`deploy/nginx.zttunnel.com.conf` — 含 HTTP→HTTPS、`443` 与 `wss` 所需 `location /websocket/`（`Upgrade`、`map $connection_upgrade`）、`/api/`、`/apsLogin/`、静态目录与缓存。证书路径、`root`、`upstream` 端口需按服务器实际修改。
+
+### 线上小车不动与同机 Nginx 自检（2026-04-07）
+
+**现象**：本地有小车动画，部署到服务器后无。
+
+**建议排查**：① 浏览器 F12 → Network → WS：是否 101、Messages 是否有含 `tunnelId`/`flag` 的帧；② 服务器 Java 是否已部署「去掉全局 id 去重、onOpen 用 HashMap」等修复；③ 推送里 `tunnelId` 是否与当前选中**左右线 id**（或 `parentTunnelId`）一致，可临时 `VITE_TUNNEL_WS_DEBUG=1` 重构建看控制台；④ `GET /push/test/traffic-ws?tunnelId=...` 验证下行。
+
+**Nginx**：仅 `listen 443` 而无 `ssl` 与证书时，**不能**作为标准 HTTPS 站点；访客用 `https://` 需 `ssl_certificate` 等或由前置机终结 TLS。`/websocket/` 的 `proxy_pass` + `Upgrade` 写法可用；`root` 务必与实际上传的 dist 一致。
+
+**CDN 挂证书**：TLS 在 CDN 终结、回源 HTTP 时，源站可不挂证书，但回源端口上仍需 `/websocket/` 反代；**须在 CDN 开启 WebSocket**。见 `deploy/nginx.zttunnel.com.conf` 头部注释。
+
+**排查结论（2026-04-08）**：源站执行 `curl` 对 `http://127.0.0.1/websocket/3` 返回 **HTTP/1.1 101** 且收到 `{"msg":"connected","code":200}` 及多路 `tunnelId`/`flag`，说明 **Nginx→Java WebSocket 正常**；公网浏览器 `wss://www...` 仍 `failed` 时，问题在 **CDN 未正确转发 WebSocket**，需在 CDN 开启 WS。前端对 **`flag<=0`** 不追加小车，选中有 **`flag>0`** 的 `tunnelId`（如 507 且 flag=15）后才有动画。
+
+**取消 CDN、Nginx 全站 80→443 后 curl 301（2026-04-08）**：再对 `http://127.0.0.1/websocket/3` 测会得到 **301 到 https://127.0.0.1/...**，因 80 仅做重定向；应用 **https** + 适配证书的主机名（`Host: www.zttunnel.com` 或公网域名）验证 WebSocket 101。说明见 `deploy/nginx.zttunnel.com.conf` 注释。
+
+### 入口随车亮灯改为「当前灯 + 前后各一盏」（2026-04-08）
+
+**原因**：原先用相邻灯中点划分区间，单车只落在一段内只亮一盏；与现场「车头灯带」预期（车身所在灯 + 前、后各一盏，共三盏）不符。
+
+**修改**：`CardEntrance.vue` 用 `litLampIndicesWithCars`：对每辆车取与 `x` **距离最小**的灯下标 `i`，点亮 `i-1、i、i+1`（越界则少于 3 盏），多车取并集。
+
+### 多车同时显示与 zt_tunnel_web 对齐（2026-04-08）
+
+**原因**：原 `tunnelDh.vue` 中 `carsPush(flag)` 用 `for (i < val)` 把 **flag 当作本批发车数量**；新项目曾用 `floor(flag/80)`，小 flag 每帧只加 1 辆，难以同时多车。
+
+**修改**：`useTunnelWebSocket.ts` 中 `carsPush` 改为 `n = min(max(1,floor(flag)), 24)`，首辆立即 `carsAdd`，其余用短随机 `setTimeout` 错峰；`stopRun` 清除待发定时器；动画仅在 `cars` 与待发队列皆空时停止。
+
+### 随车三灯与多车叠影对齐原 tunnelDh（2026-04-08）
+
+**差异**：原 `tunnelDh` 灯具按桩号落在 **50 格排序** 后算 `left/right`（px），`running` 中车 `left` 落在 `val.left < item < val.right` 则亮；新车 `carsAdd` 随机 **top 双车道**。新项目 `lampPositions` 曾 **未按里程排序**，用下标 ±1 不是空间前中后；多车同 `x`、同速易 **叠影**。
+
+**修改**：`fetchLampPositions` 对比例 **升序排序**；`centerLampIndexForCar` 用相邻灯 **中点区间** 定中灯再 ±1；`TunnelCar` 增加 `lane`，`carsPush` 为每辆设 **初始 x 间距**（`WS_SPAWN_X0/GAP`）与 **lane 交替**；`carMovingStyle` 用 `translate` 纵向错车道。
+
+### 小车步长按 tunnelDh 隧道长 + 设计车速（2026-04-08）
+
+**结论**：原 `tunnelDh.vue` **未**对接实时车速接口；`carsRun` 中 `V = (1300 / (tunnelLong / 22.22)) * 0.1` 像素/100ms，`tunnelLong` 来自 `getCurrentModel` 里程差，`22.22` 为写死的 m/s（约 80 km/h）。
+
+**修改**：`CardEntrance` 维护 `tunnelAxisLengthMeters`（与 `tunnelLong` 同源）传入 `useTunnelWebSocket`；`tunnelCarNormalizedStepPerTick` 将同式换算为 0~1 轴步长；无有效长度时用 `FALLBACK_NORMALIZED_STEP`。
+
+### 左线无灯：里程方向 out < in（2026-04-08）
+
+**原因**：`fetchLampPositions` 曾用 `tunnelLong = outM - inM`；左线若桩号录入为「大→小」，差值为负被判无效并清空 `lampPositions`。
+
+**修改**：`startM = min(in,out)`，`endM = max(in,out)`，`tunnelLong = endM - startM`；灯位比例 `(deviceNum - startM) / tunnelLong`。
+
+**文件**：`deploy/nginx.zttunnel.com.conf` 顶部增加常见坑注释。
+
+### 数据大屏中央地图省份热点（2026-04-08）
+
+**需求**：在 `cmap.png` 上对陕西、广西、湖南、吉林 四省放置可点击热点；点击展示管理单位名称、线路条数（level=2）、隧道条数（level=3）。对应 `t_tunnel_name_result` 的 level=1 节点：`1` 陕西旬凤韩黄、`542` 广西南横、`552` 炉慈桑龙、`600` 桓集高速。
+
+**数据**：不单独增接口；大屏与其它页一致调用 **`GET /tunnel/tree/list`**（`getTunnelTree`），在前端 **`mapHotspotsFromTree.ts`** 内按 id 找到 level=1 节点，对子树 DFS 统计 level=2 线路数、level=3 隧道数（与 `tunnelOverview` 口径一致）；单位名取节点 `name`，无节点时用预设兜底。
+
+**前端**：`DataScreenLayout` 去掉整页底图上的 `cmap.png`（避免与热点错位），改由 `DataScreenCenter` 内 `img` + `HOTSPOT_LAYOUT` 百分比热点；点击浮层外关闭气泡。
+
+**文件**：`DataScreenCenter.vue`、`DataScreenLayout.vue`、`mapHotspotsFromTree.ts`、`api/tunnel.ts`。
+
+### 大屏地图与提示框视觉（2026-04-08）
+
+**修改**：`DataScreenCenter.vue` 中 `cmap.png` 显示尺寸相对原 `max-height`（52vh / 520px）放大 **20%**（62.4vh / 624px；移动端 40vh→48vh）。地图热点信息框改为设计稿样式：**白边 + 圆角 12px**，**顶栏**左→右绿渐变（`#76b891`–`#c8e6b2`）白字标题（省份），**正文**浅薄荷底（`#eaf6ee`）三行：标签 `#4a6354`，数值 `#43a074`，行内为管理单位 / 线路 / 隧道。
+
+**调整（同日）**：去掉提示框渐变顶栏（不再在顶栏显示省份白字）；正文仍为管理单位 / 线路 / 隧道三行；地图在上次尺寸上再放大 **20%**（`74.88vh` / `749px`，小屏 `57.6vh`）。
+
+### 大屏地图四省热点坐标校正（2026-04-08）
+
+**问题**：`HOTSPOT_LAYOUT` 原百分比使热点偏向黑龙江、宁夏、贵州与南海一侧。**修改**：`DataScreenCenter.vue` 中调整为更接近吉林 / 陕西 / 湖南 / 广西省区（`600` `70%/28%`、`1` `52%/48%`、`552` `65%/56%`、`542` `48%/64%`）；换底图后仍可继续微调同一常量。
+
+### 大屏热力点与信息框层级（2026-04-08）
+
+**修改**：热力点为红色 `#e3252b`，白环 + 双层红色 `box-shadow` 光晕，扩散层用径向渐变脉冲。信息框恢复绿色渐变顶栏（`#76b891`–`#c8e6b2`），顶栏无文字。当前展开的热点槽位 `.map-hotspot-slot--active` 使用 `z-index: 1000`，弹层 `.map-popover` 使用 `z-index: 50` 高于同槽内按钮，避免其它热点盖住正文。`DataScreenLayout` 中 `.screen-main > .screen-center` 设 `z-index: 20`，减少左右栏压住弹层。
+
+### 大屏闪电图钉热点（2026-04-08）
+
+**修改**：`DataScreenCenter.vue` 在每个红点上方增加 **`.map-pin-btn`**：外层浅绿圆角框（`#c8e8d4`）、内层中绿渐变方角、白色闪电 SVG，底部三角指向热力点；与红点共用 `toggleHotspot`。文档点击关闭时排除 `.map-pin-btn`。信息框 `bottom` 增至 `calc(100% + 50px)`，避开图钉区域。
+
+### 大屏地图信息框按线路展示隧道数（2026-04-08）
+
+**修改**：`mapHotspotsFromTree.ts` 在 level=1 根下遍历 level=2 线路，对每条线路统计子树中 level=3 隧道数量，得到 `lineTunnelRows`；信息框保留「管理单位」后按行显示「线路名：N 条隧道」，多条线路依次列出；无数据时显示「暂无线路数据」。正文区支持 `max-height` 纵向滚动。
+
+### WebSocket 隧道车流：车速与发车间隔（2026-03-31）
+
+**需求**：穿洞车辆动画偏慢，需**加快 1 倍**（相对原步长约 2 倍）；同批车不再短随机扎堆，改为在 **5 分钟（300000ms）** 内按索引**均匀**错开发车。
+
+**实现**（`useTunnelWebSocket.ts`）：
+
+1. 常量 `CAR_SPEED_MULTIPLIER = 2`，`carsRun` 中 `step = tunnelCarNormalizedStepPerTick(...) * CAR_SPEED_MULTIPLIER`。
+2. 常量 `WS_SPAWN_WINDOW_MS = 5 * 60 * 1000`；`carsPush` 对 `n` 辆车，第 `i` 辆延时 `n <= 1 ? 0 : Math.round((i / (n - 1)) * WS_SPAWN_WINDOW_MS)`（首辆 0、末辆 300000ms）；移除原 `WS_SPAWN_SPREAD_MS` / `WS_SPAWN_JITTER_MS`。

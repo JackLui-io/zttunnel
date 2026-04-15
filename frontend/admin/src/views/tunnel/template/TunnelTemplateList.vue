@@ -4,52 +4,45 @@
       <el-card class="template-card" shadow="never">
         <template #header>
           <div class="template-card__header">
-            <span class="template-card__title">隧道模板</span>
+            <span class="template-card__title">模板列表</span>
             <div class="action-buttons">
-              <el-button :icon="Refresh" @click="handleRefresh">刷新</el-button>
-              <el-tooltip
-                content="后续开放：选择模板一键创建隧道，效果类似隧道列表中的「复制隧道群」。"
-                placement="bottom"
-              >
-                <span class="action-buttons__hint-wrap">
-                  <el-button type="primary" @click="onCreateFromTemplate">从模板新建</el-button>
-                </span>
-              </el-tooltip>
+              <el-button :icon="Refresh" @click="loadList">刷新</el-button>
             </div>
           </div>
         </template>
 
-        <el-alert
-          class="template-tip"
-          type="info"
-          :closable="false"
-          show-icon
-        >
+        <!-- <el-alert class="template-tip" type="info" :closable="false" show-icon>
           <template #title>说明</template>
           <span>
-            本页用于集中管理隧道模板列表。后续支持在隧道列表将某隧道群「存为模板」，以及在本页「从模板新建」一键生成结构（与现有「复制」能力类似）。当前数据区待接口对接。
+            数据来自接口 <code>/tunnel/param/template/list</code>。可查看模板详情；有权限时可进入模板编辑页修改名称、状态、备注及各方向快照 JSON（编辑不影响已存在的隧道，仅改模板库）。
           </span>
-        </el-alert>
+        </el-alert> -->
 
         <div class="table-wrap">
-          <el-table
-            :data="list"
-            v-loading="loading"
-            stripe
-            style="width: 100%"
-            row-key="id"
-          >
-            <el-table-column prop="templateName" label="模板名称" min-width="160" />
-            <el-table-column prop="sourceTunnelName" label="来源隧道" min-width="160" />
-            <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="createTime" label="创建时间" width="180" />
-            <el-table-column label="操作" width="120" fixed="right">
-              <template #default>
-                <el-button type="primary" link @click="onApplyTemplate">套用模板</el-button>
+          <el-table :data="list" v-loading="loading" stripe style="width: 100%" row-key="id">
+            <el-table-column prop="templateName" label="模板名称" min-width="160" show-overflow-tooltip />
+            <el-table-column label="状态" width="88">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)" size="small">
+                  {{ statusText(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+            <el-table-column label="创建时间" width="168">
+              <template #default="{ row }">
+                {{ formatDateTime(row.createTime, false) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="200" fixed="right">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="openDetail(row)">查看详情</el-button>
+                <el-button v-if="canTunnelUpdate" type="primary" link @click="goEdit(row)">编辑</el-button>
+                <el-button v-if="canTunnelUpdate" type="danger" link @click="onDelete(row)">删除</el-button>
               </template>
             </el-table-column>
             <template #empty>
-              <el-empty description="暂无隧道模板" />
+              <el-empty description="暂无模板" />
             </template>
           </el-table>
         </div>
@@ -59,30 +52,85 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getTunnelParamTemplateList, deleteTunnelParamTemplate } from '@/api/tunnel'
+import { setTemplateParamContextId } from '@/utils/templateParamContext'
+import { formatDateTime } from '@/utils/datetime'
+import { hasPermission } from '@/utils/permission'
 
+const router = useRouter()
 const loading = ref(false)
 const list = ref([])
+const canTunnelUpdate = computed(() => hasPermission('system:tunnel:update'))
 
-const handleRefresh = async () => {
+const statusText = (s) => {
+  if (s === 0) return '草稿'
+  if (s === 1) return '启用'
+  if (s === 2) return '停用'
+  return '—'
+}
+
+const statusTagType = (s) => {
+  if (s === 1) return 'success'
+  if (s === 0) return 'info'
+  if (s === 2) return 'danger'
+  return 'info'
+}
+
+const loadList = async () => {
   loading.value = true
   try {
-    await new Promise((r) => setTimeout(r, 200))
-    // 接口就绪后：加载模板列表
+    const res = await getTunnelParamTemplateList()
+    if (res.code === 200) {
+      list.value = Array.isArray(res.data) ? res.data : []
+    }
+  } catch (e) {
+    console.error(e)
   } finally {
     loading.value = false
   }
 }
 
-function onCreateFromTemplate() {
-  ElMessage.info('功能开发中模板新建入口尚未对接，后续与列表数据一并开放。')
+const openDetail = (row) => {
+  if (!row?.id) return
+  setTemplateParamContextId(row.id)
+  router.push('/tunnel/param/detail')
 }
 
-function onApplyTemplate() {
-  ElMessage.info('套用模板功能开发中，敬请期待。')
+const goEdit = (row) => {
+  if (!row?.id) return
+  setTemplateParamContextId(row.id)
+  router.push('/tunnel/param/edit')
 }
+
+const onDelete = async (row) => {
+  if (!row?.id) return
+  try {
+    await ElMessageBox.confirm(`确定逻辑删除模板「${row.templateName || row.id}」？删除后列表不再展示。`, '删除模板', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  try {
+    const res = await deleteTunnelParamTemplate(row.id)
+    if (res.code === 200) {
+      ElMessage.success(res.msg || '已删除')
+      await loadList()
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+onMounted(() => {
+  loadList()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -122,18 +170,21 @@ function onApplyTemplate() {
     gap: 10px;
   }
 
-  .action-buttons__hint-wrap {
-    display: inline-flex;
-    vertical-align: middle;
-  }
-
   .template-tip {
     margin-bottom: 16px;
     line-height: 1.6;
+
+    code {
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.06);
+    }
   }
 
   .table-wrap {
     min-height: 240px;
   }
 }
+
 </style>

@@ -496,3 +496,122 @@
 - **`router/index.js`**：原 **`TunnelParam`** 路由改为 **`TunnelTemplate`**，组件改为 **`views/tunnel/template/TunnelTemplateList.vue`**；侧栏标题 **「隧道模板」**，图标 **`DocumentCopy`**；路径仍为 **`/tunnel/param`**、权限仍为 **`tunnel:param:view`**（与后端菜单标识兼容）。
 - **新增 `TunnelTemplateList.vue`**：展示模板列表表格（当前空数据）、说明 **Alert**、工具栏 **刷新**；**从模板新建**、行内 **套用模板** 暂以 **ElMessage** 提示「功能开发中」。**存为模板 / 真实一键拷贝** 待后续接接口。
 - **删除 `views/tunnel/param/TunnelParam.vue`**：原「选隧道 + 只读参数表单」独立菜单入口移除；单隧道参数编辑仍在 **设备绑定 / 隧道详情** 的 **隧道参数** Tab（**`TunnelParamForm`**）中。
+
+## 2026-04-09 隧道参数保存：`/tunnel/update/tunnel/device/infoById` 请求体对齐后端 DTO
+
+- **原因**：后端 `TunnelNameController` 接收 **`TunnelInfoAndDeviceDto`**，字段为 **`tunnelNameResultVo`** + **`tunnelDevices`**；**`TunnelParamForm.vue`** 原先把表单字段铺在 JSON **根级**，反序列化后 **`tunnelNameResultVo` 为 null**，`TunnelNameResultServiceImpl.updateTunnelDeviceInfoById` 首段即用 **`tunnelNameResultVo.getLineName()`** → **NPE**，接口返回 **`code: 500`、 `msg`/`data` 为空**（依全局异常处理而定）。
+- **修改**：**`saveParams`** 改为提交 **`{ tunnelNameResultVo: { ...formData, id: tunnelId, preOnConfig } }`**，与 **`zt_tunnel_web` `table5.vue`** 的 **`updata.tunnelNameResultVo`** 用法一致。
+
+## 2026-04-10 数据库：隧道参数模板表
+
+- **`zt_project_tunnel/sql/tunnel_param_template.sql`**：新建 **`tunnel_param_template`**（主表）、**`tunnel_param_template_direction`**（方向子表，`payload_json` 快照，`template_id` **ON DELETE CASCADE**）。**`template_code` 唯一**；**`source_tunnel_group_id` 无 FK**。在目标库执行该脚本完成建表。
+
+## 2026-03-28 后端（zt_project_tunnel）：隧道参数模板新接口
+
+- **未改动**既有 **`TunnelCopyController`** / **`TunnelCopyService`** 对外契约；**`TunnelCopyServiceImpl`** 仅改为委托 **`TunnelL4ReplicationSupport#replicateFromLive`**，复制行为与原先一致。
+- **新增** **`TunnelL4ReplicationSupport`**：承载 L4 现网复制与 **`TunnelParamTemplatePayloadV1`** 快照落库（**`replicateFromPayload`**），设备号规则与复制一致（9916 / 保留灯具与 `t_tunnel_device` 的 `device_id` 等）。
+- **新增实体/Mapper**：**`TunnelParamTemplate`**、**`TunnelParamTemplateDirection`**、**`TunnelParamTemplateMapper`**、**`TunnelParamTemplateDirectionMapper`**。
+- **新增** **`TunnelParamTemplateService`** / **`TunnelParamTemplateServiceImpl`**：**从 L3 存快照**、**应用模板到无 L4 的 L3**、列表/详情/更新头/更新方向/逻辑删。
+- **新增** **`TunnelParamTemplateController`**，前缀 **`/tunnel/param/template`**：
+  - **`GET /list`**（**`tunnel:list:view`**）
+  - **`GET /{id}`**（**`tunnel:list:view`**）
+  - **`POST /save-from-group`**（**`system:tunnel:update`**）
+  - **`PUT /{id}`**、**`PUT /{id}/direction/{directionId}`**、**`DELETE /{id}`**（**`system:tunnel:update`**）
+  - **`POST /apply`**（**`system:tunnel:update`**）
+- **DTO/VO**：**`TunnelParamTemplatePayloadV1`**、**`TunnelParamTemplateSaveFromGroupDto`**、**`TunnelParamTemplateApplyDto`**、**`TunnelParamTemplateUpdateDto`**、**`TunnelParamTemplateDirectionUpdateDto`**、**`TunnelParamTemplateDetailVo`**、**`TunnelParamTemplateApplyResultVo`**。
+
+## 2026-03-28后端：`TunnelParamTemplateServiceImpl` 编译修复
+
+- **`BaseMapper#selectCount`** 在本工程 MyBatis-Plus 版本下返回 **`Integer`**，两处 **`Long exists` / `Long cnt`** 改为 **`Integer`**，消除「无法转换为 java.lang.Long」编译错误。
+
+## 2026-03-28 隧道列表：L3「存为模板」
+
+- **`src/api/tunnel.js`**：新增 **`saveTunnelParamTemplateFromGroup`**，**`POST /tunnel/param/template/save-from-group`**（超时 120s，与复制一致）。
+- **`src/views/tunnel/list/TunnelList.vue`**：**level=3** 且具备 **`system:tunnel:update`** 时，操作列在「复制」后增加 **「存为模板」**（绿色 plain）；操作列宽度 **460→560**。弹窗填写模板名称（默认 `{隧道群名}参数模板`）、可选编码与备注，提交后调用上述接口；说明文案与「复制隧道」数据范围对齐。
+
+## 2026-03-28 隧道列表：高速公路「添加隧道」从模板创建隧道群
+
+- **`TunnelList.vue`**：**level=2（高速公路）** 行原「添加隧道」由跳转嵌入表单改为弹窗 **「添加隧道（从模板）」**：填写 **隧道群名称**、**选择模板**（**`GET /tunnel/param/template/list`**），确定后先 **`POST /tunnel/add`** 创建 **L3**，再 **`POST /tunnel/param/template/apply`** 生成左右线及占位数据；成功则刷新并高亮新隧道群。套用失败时拦截器已提示错误，并补充 **ElMessage.warning** 说明可能出现「仅有 L3、无 L4」的中间状态。
+- **level=1「添加高速」** 仍为原 **`panel=edit`** 嵌入新增流程，不受影响。
+
+## 2026-03-28 模板列表页：对接 `/tunnel/param/template` 与编辑路由
+
+- **侧栏/路由**：菜单标题由 **「隧道模板」** 改为 **「模板列表」**；路由名 **`TunnelParamTemplateList`**，路径仍为 **`/tunnel/param`**。新增隐藏子路由 **`/tunnel/param/edit/:id`**（**`TunnelParamTemplateEdit`**，`activeMenu: '/tunnel/param'`），用于模板编辑页。
+- **`src/api/tunnel.js`**：**`getTunnelParamTemplateList`**、**`getTunnelParamTemplateDetail`**、**`updateTunnelParamTemplate`**、**`updateTunnelParamTemplateDirection`**、**`deleteTunnelParamTemplate`**、**`applyTunnelParamTemplate`**（apply 预留）。
+- **`TunnelTemplateList.vue`**：拉取 **`GET /tunnel/param/template/list`**；表格展示名称/编码/状态/来源 L3 id/备注/创建时间；**查看详情**（弹窗内描述 + 方向表 + 折叠展示格式化 JSON）；**编辑** 跳转编辑页；**删除** 调 **`DELETE`**（需 **`system:tunnel:update`**）。
+- **`TunnelTemplateEdit.vue`（新）**：加载 **`GET /{id}`**；**基本信息** 保存 **`PUT /{id}`**；每个方向独立卡片，**保存本方向** 调 **`PUT /{id}/direction/{directionId}`**（提交前校验 JSON）；无 **`system:tunnel:update`** 时整页只读提示。
+- **后端**：**`TunnelParamTemplateController`** 的列表、详情接口 **`@PreAuthorize`** 改为 **`@ss.hasAnyPermi('tunnel:list:view,tunnel:param:view')`**，与侧栏 **`tunnel:param:view`** 及隧道列表权限对齐。
+
+## 2026-03-28 模板：去掉模板编码 + 详情/编辑结构化（键值对 + 设备表）
+
+- **存为模板**：**`TunnelList.vue`** 弹窗仅保留名称与备注；**`submitSaveTemplate`** 请求体不再传 **`templateCode`**（后端 DTO 仍可为空）。
+- **模板列表**：**`TunnelTemplateList.vue`** 表格去掉「模板编码」列；方向汇总「快照」改为「设备数」；**查看详情** 用 Tab + **`TemplateDirectionPayloadPanel`**（只读）展示边缘终端字段与设备表，关闭弹窗时清空详情缓存；不再折叠展示原始 JSON。
+- **模板编辑**：**`TunnelTemplateEdit.vue`** 基本信息去掉模板编码；各方向用解析后的 **`dir.payload`** + **`TemplateDirectionPayloadPanel`**；**保存本方向** 用 **`serializeTemplatePayload`** 生成 **`payloadJson`** 再 **`PUT .../direction/{id}`**。
+- **新增**：**`src/utils/templatePayload.js`**（解析/序列化/规范化快照、增删设备时同步关联子表）；**`src/constants/templateEdgeFormFields.js`**（与隧道参数表单对齐的边缘字段元数据）；**`src/components/template/TemplateDirectionPayloadPanel.vue`**（边缘键值表单、设备表、添加/删除设备、底部统计）。
+- **从模板添加隧道**：**`TunnelList.vue`** 模板下拉选项文案 **`addTunnelTemplateOptionLabel`** 去掉 **`templateCode` 后缀**，仅名称 + 状态。
+
+## 2026-03-28 模板详情：独立页面 +与隧道列表详情一致的 Tab 结构
+
+- **路由**：新增隐藏页 **`/tunnel/param/detail/:id`**（**`TunnelParamTemplateDetail`**，`activeMenu: '/tunnel/param'`，**`tunnel:param:view`**）。
+- **`TunnelTemplateList.vue`**：**「查看详情」** 改为 **`router.push`** 进入详情页；移除详情 **`el-dialog`** 及相关状态。
+- **`TunnelTemplateDetail.vue`（新）**：拉取 **`GET /tunnel/param/template/{id}`**；顶栏 **返回模板列表**、**进入编辑**（需 **`system:tunnel:update`**）；**`el-descriptions`** 展示模板头；**方向一览**表；**`el-tabs`（按方向）** 内嵌 **`TemplateDirectionDetailTabs`**。
+- **`TemplateDirectionDetailTabs.vue`（新）**：与 **`DeviceBindWorkspace`** 对齐的六个页签——**隧道参数**（边缘终端字段只读）、**边缘控制器** / **电能终端**（**`devicelists`** 按 **`deviceTypeId`** 筛选）、**灯具终端**、**引道灯控制器**、**电表**（快照内对应数组只读表格）。
+
+## 2026-03-28 模板详情/编辑：隧道参数四列 + 页面样式统一
+
+- **`src/styles/tunnelTemplatePage.scss`**（由 **`index.scss`** 引入）：**`.tunnel-template-page`** 共用顶栏（**`page-toolbar`**）、**`tunnel-banner-alert`**、**`page-sub`**、方向区标题/表格间距；**`template-section-card`** 与详情头 **`el-descriptions`** 一致的浅边框卡片风格；**`.edge-terminal-param-grid`** 为 **4 列**响应式网格（窄屏降为 3/2/1 列），**`textarea` / 预亮灯配置 / 其它扩展字段**占 **整行**（**`--full`**）。
+- **`TemplateDirectionDetailTabs.vue`**：**隧道参数** Tab 使用上述网格只读展示。
+- **`TemplateDirectionPayloadPanel.vue`**：**边缘计算终端参数** 编辑区与详情同网格布局。
+- **`TunnelTemplateDetail.vue`**：根节点 **`tunnel-template-page`**，顶栏类名与编辑页对齐（**`page-toolbar`** 等）。
+- **`TunnelTemplateEdit.vue`**：同上；**信息提示条 + `page-sub`** 与详情一致；**`template-section-card`** 替代原青色 **`block-card`**；顶栏增加 **「查看详情」**；方向卡片标题与详情 Tab 文案对齐（**`方向 · 左右线 · 线路名 · id`**）。
+
+## 2026-03-28 边缘终端字段元数据接口 + 模板隧道参数按 DB COMMENT 展示
+
+- **后端（zt_project_tunnel / scsdky-admin）**
+  - **`GET /tunnel/edge-terminal/column-meta`**（**`tunnel:list:view` 或 `tunnel:param:view`**）：查询 **`INFORMATION_SCHEMA.COLUMNS`** 中 **`tunnel_edge_computing_terminal`** 的 **`COLUMN_COMMENT`**，与实体 **`TunnelEdgeComputingTerminal`** 反射字段、`@TableField` 列名对齐，返回 **`propertyName` / `columnName` / `comment` / `dataType` / `ordinalPosition`**；**`preOnConfig`**（**`exist = false`**）作为虚拟字段附加说明。
+  - 新增：**`TunnelEdgeTerminalMetaController`**、**`TunnelEdgeTerminalMetaService`(Impl)**、**`TunnelEdgeTerminalColumnMetaMapper`**、**`TunnelEdgeTerminalColumnMetaVo`**、**`InformationSchemaColumnRow`**。
+- **前端（zttunnel-admin）**
+  - **`getTunnelEdgeTerminalColumnMeta`**（**`api/tunnel.js`**）；**`fetchEdgeTerminalColumnMeta` / `buildCommentByPropertyMap`**（**`utils/edgeTerminalColumnMeta.js`**，内存缓存）。
+  - **`edgeTerminalParamLayout.js`**：四列 **`EDGE_TERMINAL_PARAM_SECTIONS`** 与 **`TunnelParamForm`** 一致。
+  - **`TemplateEdgeTerminalPanel.vue`**：隧道参数四列 + 预亮灯表格；**标签优先接口 COMMENT**，否则回退 **`templateEdgeFormFields`**；**`TemplateDirectionPayloadPanel`**、**`TemplateDirectionDetailTabs`**（隧道参数 Tab）改用该组件；**不展示「其它字段」**（仅四列布局内字段）。
+
+## 2026-03-28 模板 UI：隐藏结构版本与来源 L3
+
+- **`TunnelTemplateDetail.vue`**：描述列表去掉 **结构版本**、**来源 L3 id**；**创建时间** 与 **备注** 同一行（两列各一格）。
+- **`TunnelTemplateEdit.vue`**：基本信息去掉 **结构版本** 表单项及对应 **`schemaVersion`** 状态。
+- **`TunnelTemplateList.vue`**：表格去掉 **来源 L3 id** 列。
+  - **`templateEdgeFormFields.js`**：导出 **`TEMPLATE_EDGE_FIELD_BY_KEY`**供控件类型回退。
+
+## 2026-03-28 模板详情/编辑：地址栏不展示模板 id
+
+- **新增 `src/utils/templateParamContext.js`**：`sessionStorage` 键 **`ztt_admin_tunnel_param_template_id`**；**`setTemplateParamContextId`** / **`peekTemplateParamContextId`** / **`clearTemplateParamContextId`**（与隧道详情 workspace 分离）。
+- **`router/index.js`**：正式路由改为 **`/tunnel/param/detail`**、**`/tunnel/param/edit`**（无 `:id`）；保留 **`param/detail/:id`**、**`param/edit/:id`** 为兼容书签的 **`beforeEnter`**：写入 session 后 **`replace`** 到无 id 路径。
+- **`TunnelTemplateList.vue`**：进入详情/编辑前先 **`setTemplateParamContextId`**，再 **`push`** 上述无 id 路径。
+- **`TunnelTemplateDetail.vue` / `TunnelTemplateEdit.vue`**：模板 id 从 **`peekTemplateParamContextId()`** 初始化；加载成功后回写 session；**返回列表** 时 **`clearTemplateParamContextId`**；详情与编辑互跳仅 **`push`** 无 id 路径并保持 session。无上下文时提示从「模板列表」进入。
+
+## 2026-03-28 侧栏：隧道管理下不展示模板详情/编辑
+
+- **`router/index.js`**：书签兼容路由 **`param/edit/:id`**、**`param/detail/:id`** 补充 **`meta: { hidden: true }`**。原先无 **`meta`** 时 **`SidebarItem`** 按「无权限字段即展示」会把它们当成菜单项；现与正式 **`param/edit`**、**`param/detail`** 一致，侧栏仅保留 **模板列表** 等入口。
+
+## 2026-03-28 模板编辑：设备展示与详情一致 + 隐藏模板 id
+
+- **`TunnelTemplateEdit.vue`**：各方向快照改用 **`TemplateDirectionDetailTabs`**（与 **`TunnelTemplateDetail`** 相同页签：隧道参数 / 边缘控制器 / 电能终端 / 灯具终端 / 引道灯控制器 / 电表）；**基本信息** 去掉 **模板 id** 表单项；说明文案与详情布局对齐。
+- **`TemplateDirectionDetailTabs.vue`**：新增 **`readOnly`**（默认 **`true`**，详情页不变）；**`read-only=false`** 时隧道参数可编辑，顶部 **添加设备** +弹窗（与旧 **`TemplateDirectionPayloadPanel`** 一致），**边缘控制器** / **电能终端** 表格增加 **删除** 行操作；去掉原编辑页「合并设备列表 + 快照条数统计」的展示方式。
+
+## 2026-03-28 模板编辑：五类设备表均可改可删 + 增行
+
+- **`templatePayload.js`**：**`removeLampTerminalFromPayload`**（删灯具并清理 **`lampsEdgeComputings`** / **`lampsTerminalNodes`**）；**`removeApproachLampRow`**、**`removePowerMeterRow`**；**`addLampTerminalRow`**、**`addApproachLampRow`**、**`addPowerMeterRow`**。
+- **`TemplateDirectionDetailTabs.vue`**（**`readOnly=false`**）：**边缘 / 电能** 除设备号外单元格 **`el-input`** 可改；**灯具 / 引道灯** 各列可改，**删除** 确认后移除行；**电表** 可改地址/名称/方向/厂商/启用/时间，**电能终端设备号** 下拉绑定现有电能 **`devicelist`**；灯具 / 引道灯 / 电表提供 **添加…行** 弹窗。详情页仍为只读无工具栏。
+
+## 2026-03-28 后端：应用模板创建隧道时边缘/电能设备号（9916）
+
+- **工程 `zt_project_tunnel`**：**`TunnelL4ReplicationSupport`** 在 **`replicateFromPayload`**（应用参数模板）与现网复制 **`replicateFromLive`** 中，对 **`tunnel_devicelist`** 新行已按 **991600000000～991699999999** 内随机未占用号分配边缘（1）/电能（2）设备号（与隧道群复制约定一致）。
+
+## 2026-03-28 模板列表：移除「从模板新建」
+
+- **`TunnelTemplateList.vue`**：去掉头部 **从模板新建** 按钮及 **`onApplyHint`**；仅保留 **刷新**；删除未再使用的 **`.action-buttons__hint-wrap`** 样式。
+
+## 2026-03-28 隧道列表：从模板添加隧道下拉仅显示模板名称
+
+- **`TunnelList.vue`**：**`addTunnelTemplateOptionLabel`** 不再拼接 **（启用）/（草稿）/（停用）**；无名称时回退 **`模板 #id`**。
+- **本次收紧**：若快照 **`deviceTypeId`** 缺失，则用 **`tunnel_devicelist_tunnelinfo.type`**（1边缘 / 2 电能）推断，避免误走非 9916 的 **`nextUniqueLongDeviceId`**；推断出的类型在 **`deviceTypeId` 为空**时写入新 **`TunnelDevicelist`** 记录。类与方法 JavaDoc 补充说明模板应用场景与全局唯一规则。

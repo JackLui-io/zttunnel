@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/layout/index.vue'
 import { checkRoutePermission } from '@/utils/permission'
 import { ElMessage } from 'element-plus'
+import { setTemplateParamContextId } from '@/utils/templateParamContext'
 
 const routes = [
   {
@@ -117,11 +118,51 @@ const routes = [
         }
       },
       {
+        path: 'param/edit/:id',
+        name: 'TunnelParamTemplateEditLegacy',
+        meta: { hidden: true },
+        beforeEnter: (to) => {
+          setTemplateParamContextId(to.params.id)
+          return { path: '/tunnel/param/edit', replace: true }
+        }
+      },
+      {
+        path: 'param/detail/:id',
+        name: 'TunnelParamTemplateDetailLegacy',
+        meta: { hidden: true },
+        beforeEnter: (to) => {
+          setTemplateParamContextId(to.params.id)
+          return { path: '/tunnel/param/detail', replace: true }
+        }
+      },
+      {
+        path: 'param/edit',
+        name: 'TunnelParamTemplateEdit',
+        component: () => import('@/views/tunnel/template/TunnelTemplateEdit.vue'),
+        meta: {
+          title: '模板编辑',
+          hidden: true,
+          activeMenu: '/tunnel/param',
+          permission: 'tunnel:param:view'
+        }
+      },
+      {
+        path: 'param/detail',
+        name: 'TunnelParamTemplateDetail',
+        component: () => import('@/views/tunnel/template/TunnelTemplateDetail.vue'),
+        meta: {
+          title: '模板详情',
+          hidden: true,
+          activeMenu: '/tunnel/param',
+          permission: 'tunnel:param:view'
+        }
+      },
+      {
         path: 'param',
-        name: 'TunnelTemplate',
+        name: 'TunnelParamTemplateList',
         component: () => import('@/views/tunnel/template/TunnelTemplateList.vue'),
         meta: {
-          title: '隧道模板',
+          title: '模板列表',
           icon: 'DocumentCopy',
           permission: 'tunnel:param:view'
         }

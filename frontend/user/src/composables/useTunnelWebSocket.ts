@@ -6,7 +6,9 @@
  *   点开隧道就动画会与现场脱节，故不做 seed。
  * - **车流量统计卡片** 仍用 analyze/clByHouse，与入口卡片动画解耦。
  *
- * 参考原项目 zt_tunnel_web tunnelDh.vue：收到 flag 时加车、定时推进位置。
+ * 参考原项目 zt_tunnel_web tunnelDh.vue：`carsPush(flag)` 中 flag 为本批待发车辆数（有上限）。
+ * 同批车在 **5 分钟内按索引均匀** 错开发车；每辆带 **初始 x 错开 + lane 0/1**。
+ * 车速：`tunnelCarNormalizedStepPerTick * CAR_SPEED_MULTIPLIER`（当前2 倍于 tunnelDh 公式等价步长）。
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue'
 
@@ -39,11 +41,32 @@ function coerceWssWhenPageIsHttps(wsUrl: string): string {
   return wsUrl
 }
 
-const CAR_SPEED = 0.012 // 每 100ms 移动比例（0-1）
 const RUN_INTERVAL_MS = 100
-/** WS flag→本帧追加车数（与后端 trafficFlow*umax 量级配套，可调） */
-const WS_FLAG_DIVISOR = 80
-const WS_MAX_CARS_PER_MESSAGE = 12
+/**
+ * 与 zt_tunnel_web tunnelDh.vue 一致：设计车速写死为 22.22 m/s（约 80 km/h），无实时车速接口。
+ * 每 100ms 像素步长 Vpx = (TRACK_WIDTH_PX / (tunnelLong / DESIGN_SPEED_MS)) * 0.1 */
+const DESIGN_SPEED_MS = 22.22
+const TRACK_WIDTH_PX = 1300
+/** 未拿到隧道长度时的兜底（约等于原 L=1000 时的归一化步长） */
+const FALLBACK_NORMALIZED_STEP = 0.012
+/** 相对 tunnelDh 公式再乘的倍率（当前需求：穿洞视觉速度快 1 倍） */
+const CAR_SPEED_MULTIPLIER = 3
+
+/** 0~1 洞轴上每 RUN_INTERVAL_MS 的步长（与 tunnelDh 1300px 轨道等价） */
+export function tunnelCarNormalizedStepPerTick(tunnelLengthMeters: number | null | undefined): number {
+  if (tunnelLengthMeters == null || tunnelLengthMeters <= 0 || !Number.isFinite(tunnelLengthMeters)) {
+    return FALLBACK_NORMALIZED_STEP
+  }
+  const Vpx = (TRACK_WIDTH_PX / (tunnelLengthMeters / DESIGN_SPEED_MS)) * 0.1
+  return Vpx / TRACK_WIDTH_PX
+}
+/** 单次 WS 消息最多待发车辆数（原 tunnelDh 亦有 maxCars 上限，防止 flag 异常大刷爆屏） */
+const WS_MAX_CARS_PER_MESSAGE = 24
+/** 同批车在第 i 辆与第 n-1 辆之间均匀分布的时间窗（ms），含首尾 */
+const WS_SPAWN_WINDOW_MS = 5 * 60 * 1000
+/** 同批相邻车初始里程间距（0–1），减轻同速追上后叠影 */
+const WS_SPAWN_X_GAP = 0.07
+const WS_SPAWN_X0 = -0.04
 
 function getWebSocketUrl(): string {
   if (typeof window === 'undefined' || !window.WebSocket) return ''
@@ -90,12 +113,22 @@ function getWebSocketUrl(): string {
  * @param tunnelId 当前选中的隧道 ID（通常 level-4 线路 id）
  * @param parentTunnelId 可选 level-3 隧道 id，便于与绑定表里另一种 id 对齐
  */
+export type TunnelCar = { x: number; key: number; lane: 0 | 1 }
+
 export function useTunnelWebSocket(
   tunnelId: Ref<number | null | undefined>,
-  parentTunnelId?: Ref<number | null | undefined>
+  parentTunnelId?: Ref<number | null | undefined>,
+  /** 与 CardEntrance 一致：outMileageNum - inMileageNum（decToHexNum），米 */
+  tunnelAxisLengthMeters?: Ref<number | null | undefined>
 ) {
-  const cars = ref<{ x: number; key: number }[]>([])
+  const cars = ref<TunnelCar[]>([])
   let runTimer: ReturnType<typeof setInterval> | null = null
+  let spawnTimeouts: number[] = []
+
+  function clearSpawnTimeouts() {
+    spawnTimeouts.forEach((id) => window.clearTimeout(id))
+    spawnTimeouts = []
+  }
 
   /** 当前所有小车 x 位置（0-1），用于判断灯段是否亮 */
   const running = computed(() => cars.value.map((c) => c.x))
@@ -103,33 +136,48 @@ export function useTunnelWebSocket(
   /** 是否有车在隧道内（兼容：全亮时也可用） */
   const carVisible = computed(() => cars.value.length > 0)
 
-  function carsAdd() {
-    cars.value = [...cars.value, { x: -0.02, key: Date.now() }]
+  let spawnKeySeq = 0
+  function carsAdd(initialX: number, lane: 0 | 1) {
+    spawnKeySeq += 1
+    cars.value = [...cars.value, { x: initialX, key: Date.now() * 1000 + spawnKeySeq, lane }]
   }
 
   function carsPush(flag: number) {
-    const count = Math.min(
-      Math.max(1, Math.floor(flag / WS_FLAG_DIVISOR)),
-      WS_MAX_CARS_PER_MESSAGE
-    )
-    for (let i = 0; i < count; i++) {
-      carsAdd()
+    const n = Math.min(Math.max(1, Math.floor(flag)), WS_MAX_CARS_PER_MESSAGE)
+    for (let i = 0; i < n; i++) {
+      const initialX = WS_SPAWN_X0 - i * WS_SPAWN_X_GAP
+      const lane = (i % 2) as 0 | 1
+      const delay = n <= 1 ? 0 : Math.round((i / (n - 1)) * WS_SPAWN_WINDOW_MS)
+      if (delay <= 0) {
+        carsAdd(initialX, lane)
+        carsRun()
+      } else {
+        const id = window.setTimeout(() => {
+          spawnTimeouts = spawnTimeouts.filter((t) => t !== id)
+          carsAdd(initialX, lane)
+          carsRun()
+        }, delay)
+        spawnTimeouts.push(id)
+      }
     }
   }
 
   function carsRun() {
     if (runTimer) return
     runTimer = setInterval(() => {
+      const step =
+        tunnelCarNormalizedStepPerTick(tunnelAxisLengthMeters?.value) * CAR_SPEED_MULTIPLIER
       cars.value = cars.value
-        .map((c) => ({ ...c, x: c.x + CAR_SPEED }))
+        .map((c) => ({ ...c, x: c.x + step }))
         .filter((c) => c.x < 1.05)
-      if (cars.value.length === 0) {
+      if (cars.value.length === 0 && spawnTimeouts.length === 0) {
         stopRun()
       }
     }, RUN_INTERVAL_MS)
   }
 
   function stopRun() {
+    clearSpawnTimeouts()
     if (runTimer) {
       clearInterval(runTimer)
       runTimer = null
@@ -173,7 +221,6 @@ export function useTunnelWebSocket(
             return
           }
           carsPush(payload.flag)
-          carsRun()
         } catch {
           // ignore
         }

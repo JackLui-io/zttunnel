@@ -22,6 +22,12 @@ export default defineConfig({
         target: 'http://localhost:8026',
         changeOrigin: true,
       },
+      // 车流 WebSocket：与 zttunnel_web 一致 /websocket/{sid}
+      '/websocket': {
+        target: 'http://localhost:8026',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

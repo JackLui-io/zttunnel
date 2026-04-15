@@ -1,0 +1,132 @@
+/**
+ * 与 TunnelParamForm.vue 四列顺序一致（用于模板边缘终端展示/编辑）。
+ */
+export const EDGE_TERMINAL_PARAM_SECTIONS = [
+  {
+    id: 'basic',
+    title: '隧道基本参数',
+    keys: [
+      'lineName',
+      'lineId',
+      'lineMileage',
+      'lineMileageTunnel',
+      'tunnelName',
+      'tunnelId',
+      'direction',
+      'inMileageNum',
+      'outMileageNum',
+      'tunnelMileage',
+      'numlamp',
+      'numlampPemergent',
+      'numlampPbasic',
+      'basicStart',
+      'basicEnd',
+      'sectionNum',
+      'designV',
+      'entryTrafficLimit',
+      'entrySpeedLimit',
+      'backup1',
+      'backup2',
+      'backup3',
+      'backup4',
+      'backup5'
+    ]
+  },
+  {
+    id: 'calc',
+    title: '计算参数',
+    keys: [
+      'zone',
+      'zoneNum',
+      'loopNumber',
+      'designOperatingPowerR1',
+      'designOperatingPowerTotal',
+      'coeffL',
+      'lin',
+      'largeTraffic',
+      'vMin',
+      'lightDistance',
+      'delay',
+      'vMax',
+      'tNight1',
+      'tNight2',
+      'tNight3',
+      'kBrightnessreduction',
+      'l20Day',
+      'l20Design',
+      'l20DayPreMax',
+      'l20DayPreMin',
+      'vRange1',
+      'vRange2',
+      'umax',
+      'umin',
+      'pd',
+      'po',
+      'lemDesign',
+      'lnt1Design',
+      'lnt2Design',
+      'alphaRoadDesign',
+      'mode',
+      'l20',
+      'numberOfRepeats'
+    ]
+  },
+  {
+    id: 'lamp',
+    title: '灯具参数',
+    keys: [
+      'p0Th1RatedPower',
+      'p0Th2RatedPower',
+      'p0Tr1RatedPower',
+      'p0Tr2RatedPower',
+      'p0MidRatedPower',
+      'p0Ex1RatedPower',
+      'p0Ex2RatedPower',
+      'p0EmRatedPower',
+      'lightRadioMin',
+      'lightRadioMax',
+      's1Th1LightArea',
+      's1Th2LightArea',
+      's2Tr1LightArea',
+      's2Tr2LightArea',
+      's3MidLightArea',
+      's4Ex1LightArea',
+      's4Ex2LightArea',
+      's5EmLightArea',
+      'offlineTimeout',
+      'n1Th1Number',
+      'n1Th2Number',
+      'n2Tr1Number',
+      'n2Tr2Number',
+      'n3MidNumber',
+      'n4Ex1Number',
+      'n4Ex2Number',
+      'n5EmNumber',
+      'mDesign',
+      'fai1Th1Lm',
+      'fai1Th2Lm',
+      'fai2Tr1Lm',
+      'fai2Tr2Lm',
+      'fai3MidLm',
+      'fai4Ex1Lm',
+      'fai4Ex2Lm',
+      'fai5EmLm',
+      'uSpaceRate',
+      'xLayoutDesign',
+      'carbonEmissionFactor',
+      'equivalentTreeConstant',
+      'carbonReductionCoalEquivalentConstant'
+    ]
+  },
+  {
+    id: 'preOn',
+    title: '预亮灯配置控制',
+    keys: [],
+    isPreOnTable: true
+  }
+]
+
+/** 布局中出现的属性名（含 preOnConfig） */
+export const EDGE_TERMINAL_LAYOUT_KEY_SET = new Set(
+  EDGE_TERMINAL_PARAM_SECTIONS.flatMap((s) => (s.isPreOnTable ? ['preOnConfig'] : s.keys))
+)

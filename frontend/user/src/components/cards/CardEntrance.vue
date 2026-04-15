@@ -36,7 +36,7 @@
             src="/page1/car.png"
             alt=""
             class="entrance-tunnel-car entrance-tunnel-car--moving"
-            :style="carMovingStyle(c.x)"
+            :style="carMovingStyle(c)"
           />
         </div>
       </div>
@@ -59,36 +59,19 @@ const props = defineProps<{ tunnelId?: number; parentTunnelId?: number }>()
 
 const tunnelIdRef = computed(() => props.tunnelId ?? null)
 const parentTunnelIdRef = computed(() => props.parentTunnelId ?? null)
-const { cars, running } = useTunnelWebSocket(tunnelIdRef, parentTunnelIdRef)
+/** 与 tunnelDh 的 tunnelLong 相同：decToHexNum(out) - decToHexNum(in)，用于按设计车速算步长 */
+const tunnelAxisLengthMeters = ref<number | null>(null)
+const { cars, running } = useTunnelWebSocket(tunnelIdRef, parentTunnelIdRef, tunnelAxisLengthMeters)
 
 /** 照明模式：0=无极调光 1=智慧调光 2=固定功率。来自 getCurrentModel.mode */
 const lampMode = ref<number | undefined>(undefined)
 
-/**
- * 灯态（与小车数据源一致）：
- * - 小车 **仅由** WebSocket 车流推送产生；无车时无动画车。
- * - 无车：mode != 1 常量全亮；mode == 1 全暗。
- * - 有车：按段随车亮（车在相邻灯比例的中点区间内则该灯亮）。
- */
-function isLampOn(ratio: number, index: number) {
-  const positions = lampPositions.value
-  const prev: number = index > 0 ? (positions[index - 1] ?? 0) : 0
-  const next: number = index < positions.length - 1 ? (positions[index + 1] ?? 1) : 1
-  const left = (prev + ratio) / 2
-  const right = (ratio + next) / 2
-  const carInSegment = running.value.some((x) => x >= left && x <= right)
-  if (running.value.length > 0) {
-    return carInSegment
-  }
-  if (lampMode.value != null && lampMode.value !== 1) return true
-  return false
-}
-
-/** 与 useTunnelWebSocket 中 running 一致：沿洞轴 0–1，与灯具 left 百分比对齐 */
-function carMovingStyle(x: number) {
+/** 沿洞轴 0–1；lane 仿原 tunnelDh 双车道错开，减轻叠影 */
+function carMovingStyle(c: { x: number; lane: 0 | 1 }) {
+  const yOff = c.lane === 0 ? '-22%' : '10%'
   return {
-    left: `${x * 100}%`,
-    transform: 'translateX(-50%)',
+    left: `${c.x * 100}%`,
+    transform: `translate(-50%, ${yOff})`,
   } as Record<string, string>
 }
 
@@ -96,11 +79,64 @@ const tunnelWrapRef = ref<HTMLElement | null>(null)
 /** 灯具位置（0-1 比例），严格按 /tunnel/get/device/lamp 返回的 data 逐项计算 */
 const lampPositions = ref<number[]>([])
 
+/** 车在里程区间 [left,right] 内对应的「中灯」下标（对齐原 tunnelDh 按桩号区间亮灯），再亮前后各一盏；数组已按里程排序 */
+function centerLampIndexForCar(positions: number[], x: number): number {
+  const n = positions.length
+  if (n === 0) return 0
+  if (n === 1) return 0
+  for (let i = 0; i < n; i++) {
+    const left = i === 0 ? 0 : (positions[i - 1]! + positions[i]!) / 2
+    const right = i === n - 1 ? 1 : (positions[i]! + positions[i + 1]!) / 2
+    if (x >= left && x <= right) return i
+  }
+  let bestI = 0
+  let bestDist = Math.abs(positions[0]! - x)
+  for (let i = 1; i < n; i++) {
+    const dist = Math.abs(positions[i]! - x)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestI = i
+    }
+  }
+  return bestI
+}
+
+const litLampIndicesWithCars = computed(() => {
+  const positions = lampPositions.value
+  const carXs = running.value
+  const lit = new Set<number>()
+  const n = positions.length
+  if (n === 0 || carXs.length === 0) return lit
+
+  for (const x of carXs) {
+    const mid = centerLampIndexForCar(positions, x)
+    for (let j = mid - 1; j <= mid + 1; j++) {
+      if (j >= 0 && j < n) lit.add(j)
+    }
+  }
+  return lit
+})
+
+/**
+ * 灯态（与小车数据源一致）：
+ * - 小车 **仅由** WebSocket 车流推送产生；无车时无动画车。
+ * - 无车：mode != 1 常量全亮；mode == 1 全暗。
+ * - 有车：灯具坐标已按里程排序；每辆车落在相邻灯中点划分的区间内定「中灯」，再亮 index±1（与原 tunnelDh 区间判定一致），多车并集。
+ */
+function isLampOn(_ratio: number, index: number) {
+  if (running.value.length > 0) {
+    return litLampIndicesWithCars.value.has(index)
+  }
+  if (lampMode.value != null && lampMode.value !== 1) return true
+  return false
+}
+
 /** 严格依据 API：getDeviceLamp 的 data + getCurrentModel 的 in/out 里程，计算每个灯的位置比例 */
 async function fetchLampPositions() {
   const tid = props.tunnelId
   if (tid == null) {
     lampPositions.value = []
+    tunnelAxisLengthMeters.value = null
     return
   }
   try {
@@ -124,26 +160,39 @@ async function fetchLampPositions() {
 
     const inM = decToHexNum(modelRes?.inMileageNum)
     const outM = decToHexNum(modelRes?.outMileageNum)
-    const tunnelLong = outM - inM
+    /** 左右线可能桩号方向相反，必须用区间长度，不能假定 out > in */
+    const startM = Math.min(inM, outM)
+    const endM = Math.max(inM, outM)
+    const tunnelLong = endM - startM
 
-    if (list.length === 0 || tunnelLong === 0) {
+    if (!Number.isFinite(tunnelLong) || tunnelLong <= 0) {
       lampPositions.value = []
       lampMode.value = undefined
+      tunnelAxisLengthMeters.value = null
       return
     }
 
+    tunnelAxisLengthMeters.value = tunnelLong
     lampMode.value = typeof modelRes?.mode === 'number' ? modelRes.mode : undefined
+
+    if (list.length === 0) {
+      lampPositions.value = []
+      return
+    }
 
     const positions: number[] = []
     for (const item of list) {
       const deviceNum = decToHexNum(Number(item.deviceNum ?? 0))
-      const ratio = (deviceNum - inM) / tunnelLong
+      const ratio = (deviceNum - startM) / tunnelLong
       const clamped = Math.min(1, Math.max(0, ratio))
       positions.push(clamped)
     }
+    // API 返回顺序未必沿入口→出口；不排序则 index±1 不是空间上的前中后（与原50 格按桩号排序一致）
+    positions.sort((a, b) => a - b)
     lampPositions.value = positions
   } catch {
     lampPositions.value = []
+    tunnelAxisLengthMeters.value = null
   }
 }
 
@@ -404,6 +453,6 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .entrance-tunnel-car--moving {
-  transition: left 0.1s linear;
+  transition: left 0.1s linear, transform 0.1s linear;
 }
 </style>

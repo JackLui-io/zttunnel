@@ -46,7 +46,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="createTime" label="创建时间" />
-            <el-table-column label="操作" width="460" fixed="right">
+            <el-table-column label="操作" width="560" fixed="right">
               <template #default="scope">
                 <el-space :size="8" wrap class="tunnel-list-ops">
                   <template v-if="isAddChildLevel(scope.row) && canTunnelUpdate">
@@ -60,6 +60,9 @@
                     </el-button>
                     <el-button type="primary" size="small" @click="openCopyTunnelGroupDialog(scope.row)">
                       复制
+                    </el-button>
+                    <el-button type="success" size="small" plain @click="openSaveTemplateDialog(scope.row)">
+                      存为模板
                     </el-button>
                   </template>
                   <template v-if="scope.row.level === 4">
@@ -114,6 +117,110 @@
           <el-button @click="copyTunnelGroupDialogVisible = false">取消</el-button>
           <el-button type="primary" :loading="copyTunnelGroupSubmitting" @click="submitCopyTunnelGroup">
             确定复制
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="saveTemplateDialogVisible"
+        title="存为参数模板"
+        width="480px"
+        destroy-on-close
+        @closed="resetSaveTemplateForm"
+      >
+        <el-form label-width="100px" @submit.prevent>
+          <el-form-item label="源隧道群">
+            <el-input :model-value="saveTemplateSourceRow?.tunnelName || ''" disabled />
+          </el-form-item>
+          <el-form-item label="模板名称" required>
+            <el-input
+              v-model="saveTemplateName"
+              placeholder="用于在模板列表中识别"
+              maxlength="128"
+              show-word-limit
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input
+              v-model="saveTemplateRemark"
+              type="textarea"
+              :rows="2"
+              placeholder="可选"
+              maxlength="512"
+              show-word-limit
+            />
+          </el-form-item>
+          <p class="copy-tunnel-hint">
+            将当前隧道群下左右线（L4）及与「复制隧道」相同范围的参数快照写入模板；不修改现网隧道。
+          </p>
+        </el-form>
+        <template #footer>
+          <el-button @click="saveTemplateDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saveTemplateSubmitting" @click="submitSaveTemplate">
+            确定保存
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="addTunnelFromTemplateVisible"
+        title="添加隧道（从模板）"
+        width="480px"
+        destroy-on-close
+        @closed="resetAddTunnelFromTemplateForm"
+      >
+        <el-form label-width="110px" @submit.prevent>
+          <el-form-item label="所属高速">
+            <el-input :model-value="addTunnelFromTemplateParent?.tunnelName || ''" disabled />
+          </el-form-item>
+          <el-form-item label="隧道群名称" required>
+            <el-input
+              v-model="addTunnelFromTemplateName"
+              placeholder="新建隧道群名称，同级下唯一"
+              maxlength="128"
+              show-word-limit
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="隧道模板" required>
+            <el-select
+              v-model="addTunnelFromTemplateId"
+              placeholder="选择已保存的模板"
+              filterable
+              clearable
+              style="width: 100%"
+              :loading="addTunnelTemplateListLoading"
+            >
+              <el-option
+                v-for="t in addTunnelTemplateList"
+                :key="t.id"
+                :label="addTunnelTemplateOptionLabel(t)"
+                :value="t.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-alert
+            v-if="!addTunnelTemplateListLoading && addTunnelTemplateList.length === 0"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="add-tunnel-template-empty"
+            title="当前无可用模板，请先在隧道群上使用「存为模板」，或到「模板列表」检查。"
+          />
+          <p class="copy-tunnel-hint">
+            将先创建空隧道群（L3），再按模板生成左右线及设备占位数据；与「复制隧道群」数据范围一致。若套用失败，隧道群可能已创建但无左右线，可删除后重试。
+          </p>
+        </el-form>
+        <template #footer>
+          <el-button @click="addTunnelFromTemplateVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="addTunnelFromTemplateSubmitting"
+            :disabled="!addTunnelTemplateList.length"
+            @click="submitAddTunnelFromTemplate"
+          >
+            确定
           </el-button>
         </template>
       </el-dialog>
@@ -252,7 +359,10 @@ import {
   getPlaceholderTunnelIds,
   addTunnel,
   updateTunnel,
-  copyTunnelGroup
+  copyTunnelGroup,
+  saveTunnelParamTemplateFromGroup,
+  getTunnelParamTemplateList,
+  applyTunnelParamTemplate
 } from '@/api/tunnel'
 import { hasPermission } from '@/utils/permission'
 import {
@@ -377,6 +487,21 @@ const copyTunnelGroupSubmitting = ref(false)
 const copySourceTunnelGroup = ref(null)
 const copyNewTunnelName = ref('')
 
+const saveTemplateDialogVisible = ref(false)
+const saveTemplateSubmitting = ref(false)
+const saveTemplateSourceRow = ref(null)
+const saveTemplateName = ref('')
+const saveTemplateRemark = ref('')
+
+/** L2：添加隧道群 = 名称 + 选模板后 apply */
+const addTunnelFromTemplateVisible = ref(false)
+const addTunnelFromTemplateParent = ref(null)
+const addTunnelFromTemplateName = ref('')
+const addTunnelFromTemplateId = ref(null)
+const addTunnelFromTemplateSubmitting = ref(false)
+const addTunnelTemplateListLoading = ref(false)
+const addTunnelTemplateList = ref([])
+
 /** L3 弹窗：名称 / 里程 / 状态；与 L4 工作台编辑无关 */
 const editTunnelGroupDialogVisible = ref(false)
 const editTunnelGroupSubmitting = ref(false)
@@ -395,6 +520,138 @@ const openCopyTunnelGroupDialog = (row) => {
 const resetCopyTunnelGroupForm = () => {
   copySourceTunnelGroup.value = null
   copyNewTunnelName.value = ''
+}
+
+const openSaveTemplateDialog = (row) => {
+  if (!row?.id || row.level !== 3) return
+  saveTemplateSourceRow.value = row
+  const base = (row.tunnelName || '').trim()
+  saveTemplateName.value = base ? `${base}参数模板` : '参数模板'
+  saveTemplateRemark.value = ''
+  saveTemplateDialogVisible.value = true
+}
+
+const resetSaveTemplateForm = () => {
+  saveTemplateSourceRow.value = null
+  saveTemplateName.value = ''
+  saveTemplateRemark.value = ''
+}
+
+const addTunnelTemplateOptionLabel = (t) => {
+  if (!t) return ''
+  const name = (t.templateName || '').trim()
+  return name || `模板 #${t.id}`
+}
+
+const loadAddTunnelTemplateList = async () => {
+  addTunnelTemplateListLoading.value = true
+  try {
+    const res = await getTunnelParamTemplateList()
+    if (res.code === 200) {
+      addTunnelTemplateList.value = Array.isArray(res.data) ? res.data : []
+    } else {
+      addTunnelTemplateList.value = []
+    }
+  } catch (e) {
+    console.error(e)
+    addTunnelTemplateList.value = []
+  } finally {
+    addTunnelTemplateListLoading.value = false
+  }
+}
+
+const resetAddTunnelFromTemplateForm = () => {
+  addTunnelFromTemplateParent.value = null
+  addTunnelFromTemplateName.value = ''
+  addTunnelFromTemplateId.value = null
+}
+
+const submitAddTunnelFromTemplate = async () => {
+  const name = (addTunnelFromTemplateName.value || '').trim()
+  if (!name) {
+    ElMessage.warning('请输入隧道群名称')
+    return
+  }
+  const parent = addTunnelFromTemplateParent.value
+  if (!parent?.id || parent.level !== 2) {
+    ElMessage.warning('父级高速公路无效')
+    return
+  }
+  const tid = addTunnelFromTemplateId.value
+  if (tid == null || tid === '') {
+    ElMessage.warning('请选择隧道模板')
+    return
+  }
+  addTunnelFromTemplateSubmitting.value = true
+  let newGroupId = null
+  try {
+    const addRes = await addTunnel({
+      tunnelName: name,
+      parentId: parent.id,
+      level: 3,
+      tunnelMileage: null,
+      status: 0
+    })
+    if (addRes.code !== 200) {
+      return
+    }
+    const rawId = addRes.data
+    newGroupId = rawId != null ? Number(rawId) : null
+    if (newGroupId == null || Number.isNaN(newGroupId)) {
+      ElMessage.error('创建隧道群成功但未返回有效 id，无法套用模板')
+      await getTunnelList()
+      return
+    }
+    const applyRes = await applyTunnelParamTemplate({
+      targetTunnelGroupId: newGroupId,
+      templateId: Number(tid)
+    })
+    ElMessage.success(applyRes.msg || '已根据模板创建左右线')
+    addTunnelFromTemplateVisible.value = false
+    await getTunnelList()
+    await focusTreeRowById(newGroupId)
+  } catch (e) {
+    console.error(e)
+    if (newGroupId != null) {
+      await getTunnelList()
+      await focusTreeRowById(newGroupId)
+      ElMessage.warning(
+        '若隧道群已创建但无左右线，请查看上方错误提示；可删除该空隧道群后重试，或检查模板与权限。'
+      )
+    }
+  } finally {
+    addTunnelFromTemplateSubmitting.value = false
+  }
+}
+
+const submitSaveTemplate = async () => {
+  const name = (saveTemplateName.value || '').trim()
+  if (!name) {
+    ElMessage.warning('请输入模板名称')
+    return
+  }
+  const src = saveTemplateSourceRow.value
+  if (!src?.id) {
+    ElMessage.warning('源隧道群无效')
+    return
+  }
+  const remark = (saveTemplateRemark.value || '').trim()
+  saveTemplateSubmitting.value = true
+  try {
+    const res = await saveTunnelParamTemplateFromGroup({
+      sourceTunnelGroupId: src.id,
+      templateName: name,
+      ...(remark ? { remark } : {})
+    })
+    if (res.code === 200) {
+      ElMessage.success(res.msg || '已存为模板')
+      saveTemplateDialogVisible.value = false
+    }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    saveTemplateSubmitting.value = false
+  }
 }
 
 const openEditTunnelGroupDialog = (row) => {
@@ -497,6 +754,15 @@ const submitCopyTunnelGroup = async () => {
 
 const openAddChild = (row) => {
   if (!row?.id || !isAddChildLevel(row)) return
+  // 高速公路下新增隧道群：名称 + 模板 → 创建 L3 并套用模板生成左右线
+  if (row.level === 2) {
+    addTunnelFromTemplateParent.value = row
+    addTunnelFromTemplateName.value = ''
+    addTunnelFromTemplateId.value = null
+    addTunnelFromTemplateVisible.value = true
+    loadAddTunnelTemplateList()
+    return
+  }
   router.push({
     path: '/tunnel/list',
     query: { panel: 'edit', parentId: String(row.id) }

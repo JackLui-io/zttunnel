@@ -682,10 +682,14 @@ const saveParams = async () => {
     ElMessage.warning('当前为查看模式，无法保存')
     return
   }
+  // 后端 TunnelInfoAndDeviceDto 要求 tunnelNameResultVo 嵌套（与 zt_tunnel_web table5 一致），
+  // 勿将字段铺在 JSON 根上，否则 tunnelNameResultVo 为 null 导致服务端 NPE → code 500。
   const data = {
-    ...formData.value,
-    id: props.tunnelId,
-    preOnConfig: serializePreOnConfig()
+    tunnelNameResultVo: {
+      ...formData.value,
+      id: props.tunnelId,
+      preOnConfig: serializePreOnConfig()
+    }
   }
   const res = await updateTunnelParamInfo(data)
   if (res.code !== 200) {

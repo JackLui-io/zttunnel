@@ -156,6 +156,76 @@ export function copyTunnelGroup(data) {
   })
 }
 
+// 从隧道群（L3）存为参数模板 — POST /tunnel/param/template/save-from-group
+export function saveTunnelParamTemplateFromGroup(data) {
+  return request({
+    url: '/tunnel/param/template/save-from-group',
+    method: 'post',
+    data,
+    timeout: 120000
+  })
+}
+
+// 参数模板列表 GET /tunnel/param/template/list
+export function getTunnelParamTemplateList() {
+  return request({
+    url: '/tunnel/param/template/list',
+    method: 'get'
+  })
+}
+
+// 参数模板详情 GET /tunnel/param/template/{id}
+export function getTunnelParamTemplateDetail(id) {
+  return request({
+    url: `/tunnel/param/template/${id}`,
+    method: 'get'
+  })
+}
+
+// 更新模板头 PUT /tunnel/param/template/{id}
+export function updateTunnelParamTemplate(id, data) {
+  return request({
+    url: `/tunnel/param/template/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+// 更新模板方向行 PUT /tunnel/param/template/{id}/direction/{directionId}
+export function updateTunnelParamTemplateDirection(templateId, directionId, data) {
+  return request({
+    url: `/tunnel/param/template/${templateId}/direction/${directionId}`,
+    method: 'put',
+    data
+  })
+}
+
+// tunnel_edge_computing_terminal 列 COMMENT 元数据 GET /tunnel/edge-terminal/column-meta
+export function getTunnelEdgeTerminalColumnMeta() {
+  return request({
+    url: '/tunnel/edge-terminal/column-meta',
+    method: 'get'
+  })
+}
+
+// 逻辑删除模板 DELETE /tunnel/param/template/{id}
+export function deleteTunnelParamTemplate(id) {
+  return request({
+    url: `/tunnel/param/template/${id}`,
+    method: 'delete'
+  })
+}
+
+// 应用模板到无 L4 的 L3 POST /tunnel/param/template/apply
+export function applyTunnelParamTemplate(data) {
+  return request({
+    url: '/tunnel/param/template/apply',
+    method: 'post',
+    data,
+    timeout: 120000
+  })
+}
+
 // Excel 批量新建隧道（对齐 zt_tunnel_web）：POST /easyExcel/excelInput，表单字段名 file
 export function importTunnelExcel(file) {
   const formData = new FormData()
